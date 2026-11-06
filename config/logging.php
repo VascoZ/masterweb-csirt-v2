@@ -1,5 +1,6 @@
 <?php
 
+use Monolog\Formatter\JsonFormatter;
 use Monolog\Handler\NullHandler;
 use Monolog\Handler\StreamHandler;
 use Monolog\Handler\SyslogUdpHandler;
@@ -71,6 +72,31 @@ return [
             'level' => env('LOG_LEVEL', 'debug'),
             'days' => env('LOG_DAILY_DAYS', 14),
             'replace_placeholders' => true,
+        ],
+
+        // Jejak audit keamanan (JSON per baris) untuk diteruskan ke SIEM/log terpusat.
+        // Pilih kanal lewat CSIRT_SECURITY_LOG_CHANNEL: security | security_stderr | syslog.
+        'security' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/security.log'),
+            'level' => 'info',
+            'days' => env('LOG_SECURITY_DAYS', 365),
+            'formatter' => JsonFormatter::class,
+            'permission' => 0640,
+        ],
+
+        // Membuang semua log (dipakai oleh phpunit.xml agar test tidak menulis file).
+        'discard' => [
+            'driver' => 'monolog',
+            'handler' => NullHandler::class,
+        ],
+
+        'security_stderr' => [
+            'driver' => 'monolog',
+            'level' => 'info',
+            'handler' => StreamHandler::class,
+            'handler_with' => ['stream' => 'php://stderr'],
+            'formatter' => JsonFormatter::class,
         ],
 
         'slack' => [

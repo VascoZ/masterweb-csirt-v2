@@ -13,7 +13,12 @@
                     <td>{{ $user->name }}</td>
                     <td><code>{{ $user->username }}</code></td>
                     <td>{{ $user->email }}</td>
-                    <td><span @class(['badge', 'badge-soft-danger' => $user->isSuperadmin(), 'badge-soft-primary' => ! $user->isSuperadmin() && $user->isAdmin(), 'badge-soft-secondary' => ! $user->isAdmin()])>{{ $user->roleLabel() }}</span></td>
+                    <td>
+                        <span @class(['badge', 'badge-soft-danger' => $user->isSuperadmin(), 'badge-soft-primary' => ! $user->isSuperadmin() && $user->isAdmin(), 'badge-soft-secondary' => ! $user->isAdmin()])>{{ $user->roleLabel() }}</span>
+                        @if (! $user->is_active)
+                            <span class="badge bg-secondary">Nonaktif</span>
+                        @endif
+                    </td>
                     <td>
                         @if ($user->hasTwoFactorEnabled())
                             <i class="bi bi-shield-check text-success" title="Aktif"></i>

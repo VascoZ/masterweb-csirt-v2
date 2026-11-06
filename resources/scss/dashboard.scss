@@ -138,6 +138,16 @@ body { background: $gray-50; font-size: .925rem; }
 }
 
 // ---------- Editor ----------
+// Aturan dasar Trix. Trix menyisipkannya lewat <style> dinamis (butuh nonce CSP); disalin
+// ke sini agar editor tetap benar walau injeksi itu gagal/diblokir.
+trix-toolbar { display: block; white-space: nowrap; }
+trix-toolbar [data-trix-dialog] { display: none; }
+trix-toolbar [data-trix-dialog][data-trix-active] { display: block; }
+trix-toolbar [data-trix-dialog] [data-trix-validate]:invalid { background-color: #ffdddd; }
+trix-editor { display: block; }
+trix-editor:empty::before { content: attr(placeholder); color: graytext; cursor: text; pointer-events: none; white-space: pre-line; }
+trix-editor img { max-width: 100%; height: auto; }
+
 trix-toolbar [data-trix-button-group='file-tools'] { display: none; }
 trix-toolbar .trix-button-group { border-color: $gray-300; border-radius: $border-radius-sm; overflow: hidden; }
 trix-toolbar .trix-button { border-color: $gray-200; }

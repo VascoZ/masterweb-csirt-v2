@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Dashboard;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Support\AuditLogger;
+use App\Support\Sessions;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -35,6 +36,7 @@ class UserController extends Controller
 
         $user = new User($data);
         $user->is_admin = $request->boolean('is_admin');
+        $user->is_active = $request->boolean('is_active', true);
         $user->save();
 
         return redirect()->route('dashboard.users.index')->with('success', 'Pengguna berhasil ditambahkan.');
@@ -58,17 +60,28 @@ class UserController extends Controller
         }
 
         $user->fill($data);
+        $terminateSessions = isset($data['password']);
 
         if ($request->user()->can('changeRole', $user)) {
             $user->is_admin = $request->boolean('is_admin');
 
+            if ($request->has('is_active')) {
+                $user->is_active = $request->boolean('is_active');
+                $terminateSessions = $terminateSessions || ! $user->is_active;
+            }
+
             if ($request->boolean('reset_2fa') && $user->hasTwoFactorEnabled()) {
-                $user->forceFill(['two_factor_secret' => null, 'two_factor_recovery_codes' => null, 'two_factor_confirmed_at' => null]);
+                $user->resetTwoFactor();
+                $terminateSessions = true;
                 AuditLogger::log('2fa_reset', $user, description: '2FA pengguna direset oleh superadmin');
             }
         }
 
         $user->save();
+
+        if ($terminateSessions) {
+            Sessions::terminateAll($user);
+        }
 
         return redirect()->route('dashboard.users.index')->with('success', 'Pengguna berhasil diperbarui.');
     }

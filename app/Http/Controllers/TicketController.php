@@ -8,14 +8,12 @@ use App\Http\Requests\StoreTicketRequest;
 use App\Models\Ticket;
 use App\Notifications\TicketReceived;
 use App\Notifications\TicketSubmittedToTeam;
+use App\Support\TicketMailer;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
-use Throwable;
 
 /**
  * Form aduan insiden siber untuk publik dan pengecekan status tiket.
@@ -90,17 +88,49 @@ class TicketController extends Controller
         ]);
     }
 
+    /**
+     * Balasan atau keterangan tambahan dari pelapor pada halaman cek status.
+     */
+    public function reply(Request $request): View|RedirectResponse
+    {
+        $data = $request->validate([
+            'ticket_number' => ['required', 'string', 'max:40'],
+            'email' => ['required', 'email'],
+            'note' => ['required', 'string', 'min:5', 'max:5000'],
+        ]);
+
+        $ticket = Ticket::findForReporter($data['ticket_number'], $data['email']);
+
+        if (! $ticket) {
+            return redirect()->route('tickets.status.form')->with('error', 'Tiket tidak ditemukan.');
+        }
+
+        if ($ticket->status->isClosed()) {
+            return redirect()->route('tickets.status.form')->with('error', 'Tiket sudah ditutup dan tidak dapat menerima keterangan tambahan.');
+        }
+
+        $ticket->updates()->create([
+            'user_id' => null,
+            'status' => null,
+            'note' => '[Pelapor] ' . $data['note'],
+            'is_public' => true,
+        ]);
+
+        TicketMailer::toTeam($ticket, new TicketSubmittedToTeam($ticket));
+
+        session()->flash('success', 'Keterangan tambahan berhasil dikirim.');
+
+        return view('pages.tickets.status', [
+            'ticket' => $ticket->load('publicUpdates'),
+        ]);
+    }
+
+    /**
+     * Email hanya terkirim bila CSIRT_MAIL_NOTIFICATIONS=true (default nonaktif).
+     */
     private function notify(Ticket $ticket): void
     {
-        try {
-            Notification::route('mail', $ticket->reporter_email)->notify(new TicketReceived($ticket));
-
-            if ($team = config('csirt.team_email')) {
-                Notification::route('mail', $team)->notify(new TicketSubmittedToTeam($ticket));
-            }
-        } catch (Throwable $e) {
-            // Aduan tetap tersimpan walau email gagal terkirim.
-            Log::warning('Notifikasi aduan gagal dikirim', ['ticket' => $ticket->ticket_number, 'error' => $e->getMessage()]);
-        }
+        TicketMailer::toReporter($ticket, new TicketReceived($ticket));
+        TicketMailer::toTeam($ticket, new TicketSubmittedToTeam($ticket));
     }
 }

@@ -67,6 +67,8 @@ class HtmlSanitizer
             $url = trim(html_entity_decode($input, ENT_QUOTES | ENT_HTML5));
         }
 
-        return preg_match('#^https://(www\.)?google\.[a-z.]+/maps/embed\?[^\s"\'<>]*$#i', $url) ? $url : null;
+        // Host harus persis www.google.com (URL embed resmi Google Maps). Pola longgar
+        // seperti google\.[a-z.]+ akan menerima google.com.domain-penyerang.tld.
+        return preg_match('#^https://www\.google\.com/maps/embed\?[^\s"\'<>]*$#i', $url) ? $url : null;
     }
 }

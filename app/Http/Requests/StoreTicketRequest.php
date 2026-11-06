@@ -34,7 +34,12 @@ class StoreTicketRequest extends FormRequest
             'description' => ['required', 'string', 'min:20', 'max:10000'],
             'tlp' => ['required', Rule::enum(Tlp::class)],
             'attachments' => ['nullable', 'array', 'max:' . $attachment['max_files']],
-            'attachments.*' => ['file', 'max:' . $attachment['max_kb'], 'mimes:' . implode(',', $attachment['mimes'])],
+            'attachments.*' => [
+                'file',
+                'max:' . $attachment['max_kb'],
+                'extensions:' . implode(',', $attachment['mimes']),
+                'mimes:' . implode(',', $attachment['mimes']),
+            ],
             'agreement' => ['accepted'],
             'captcha' => ['required', 'captcha'],
         ];

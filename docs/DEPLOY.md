@@ -12,7 +12,7 @@ Ada tiga cara memasang situs CSIRT. Pilih salah satu:
 
 - Domain/subdomain, misalnya `csirt.contoh.go.id`, yang mengarah ke IP server.
 - Sertifikat TLS: Let's Encrypt (butuh port 80 terbuka dari internet) atau sertifikat instansi.
-- Akun SMTP untuk mengirim notifikasi aduan.
+- (Opsional) Akun SMTP, hanya bila ingin mengaktifkan notifikasi email aduan. Secara default aduan dikelola sepenuhnya melalui dashboard (lihat [Notifikasi Email](#notifikasi-email-opsional)).
 - Daftar IP/subnet kantor atau VPN yang boleh membuka halaman login dan SSH.
 
 ---
@@ -57,7 +57,7 @@ sudo DOMAIN=csirt.contoh.go.id SITE_NAME="Contoh-CSIRT" \
 | `SSH_ALLOW` | IP/CIDR yang boleh SSH. **Wajib diisi untuk produksi**; bila kosong, SSH terbuka untuk semua IP. |
 | `SOURCE_DIR` | Untuk server tanpa akses ke GitHub: salin folder kode ke server, lalu arahkan ke folder itu |
 | `SKIP_FIREWALL=1` | Lewati UFW bila firewall dikelola perangkat jaringan |
-| `MAIL_*`, `TEAM_EMAIL` | SMTP dan penerima notifikasi aduan. Bila kosong, email hanya ditulis ke log. |
+| `MAIL_*`, `TEAM_EMAIL` | Opsional. Bila `MAIL_HOST` diisi, notifikasi email aduan diaktifkan (`CSIRT_MAIL_NOTIFICATIONS=true`). Bila kosong, aduan dikelola lewat dashboard saja. |
 
 Daftar lengkap variabel ada di bagian atas script.
 
@@ -114,7 +114,7 @@ Isi minimal di `.env`:
 | `APP_URL` | Alamat publik, wajib `https://` |
 | `DB_PASSWORD`, `DB_ROOT_PASSWORD` | Password acak yang kuat. Bila mengandung `$`, apit dengan kutip tunggal. |
 | `CSIRT_LOGIN_WHITELIST` | IP/CIDR kantor atau VPN, misalnya `10.10.0.0/16,203.0.113.5` |
-| `MAIL_*` | Akun SMTP |
+| `MAIL_*` | Opsional, hanya bila notifikasi email diaktifkan |
 | `ADMIN_EMAIL`, `ADMIN_PASSWORD` | Superadmin pertama, dibuat otomatis saat container pertama kali berjalan |
 
 ### 2.3 Jalankan
@@ -254,7 +254,7 @@ composer install --no-dev --optimize-autoloader
 npm ci && npm run build && rm -rf node_modules
 cp .env.example .env
 php artisan key:generate --force
-nano .env    # isi APP_URL, DB_PASSWORD, MAIL_*, CSIRT_LOGIN_WHITELIST, dll.
+nano .env    # isi APP_URL, DB_PASSWORD, CSIRT_LOGIN_WHITELIST, dll. (MAIL_* opsional)
 sudo chgrp www-data .env && chmod 640 .env   # hanya Anda & PHP yang bisa membaca
 
 # storage/ dan bootstrap/cache/ harus bisa ditulis PHP
@@ -306,18 +306,63 @@ sudo -u www-data php artisan up
 | `CSIRT_LOGIN_WHITELIST` | `127.0.0.1,::1` | IP/CIDR yang boleh membuka `/csirt-login`. IP lain mendapat 404. |
 | `TRUSTED_PROXIES` | kosong | Isi bila Laravel berada di belakang proxy HTTP. Tidak perlu untuk Nginx → PHP-FPM (FastCGI). |
 | `CSIRT_ENFORCE_2FA` | `true` | Wajibkan 2FA untuk semua akun dashboard. |
-| `CSIRT_TEAM_EMAIL` | kosong | Penerima notifikasi aduan baru. |
+| `CSIRT_SESSION_ABSOLUTE_MINUTES` | `480` | Batas umur sesi sejak login (menit), terlepas dari aktivitas. `0` = tanpa batas. Dapat ditimpa dari dashboard (skema durasi sesi). |
+| `CSIRT_TRUSTED_HOSTS` | kosong | Host tambahan yang diterima selain host `APP_URL` dan loopback, mis. alamat IP server: `10.10.1.5,csirt.instansi.go.id`. Host lain mendapat 400. |
+| `CSIRT_CANONICAL_REDIRECT` | `true` | Alihkan `127.0.0.1`/`::1` ke host `APP_URL` agar cookie sesi tidak terpecah antar host. |
+| `CSIRT_SECURITY_LOG_CHANNEL` | `security` | Tujuan log keamanan JSON: `security` (file), `security_stderr` (Docker), atau `syslog`. |
+| `CSIRT_RETENTION_AUDIT_LOG_DAYS` | `730` | Hapus audit log lebih lama dari ini. `0` = simpan selamanya. Dapat diubah dari dashboard. |
+| `CSIRT_RETENTION_CLOSED_TICKET_DAYS` | `0` | Anonimkan data pribadi aduan yang ditutup lebih lama dari ini. `0` = tidak pernah. Dapat diubah dari dashboard. |
+| `CSIRT_MAIL_NOTIFICATIONS` | `false` | Kirim email tanda terima/pembaruan ke pelapor dan pemberitahuan ke tim. |
+| `CSIRT_TEAM_EMAIL` | kosong | Penerima notifikasi aduan baru (hanya bila `CSIRT_MAIL_NOTIFICATIONS=true`). |
 | `CSIRT_TICKET_PREFIX` | `CSIRT` | Format nomor tiket `PREFIX-YYYYMMDD-XXXXXX`. |
 | `CSIRT_SECURITY_POLICY_URL` | kosong | URL kebijakan pengungkapan kerentanan (field `Policy` di security.txt). |
 | `SESSION_LIFETIME` | `30` | Menit tidak aktif sebelum sesi berakhir. |
 
 Setelah mengubah `.env`, jalankan `php artisan optimize` (atau `docker compose up -d` pada Docker) agar cache konfigurasi diperbarui.
 
+## Pengaturan Sistem (Dashboard, Superadmin)
+
+Menu **Dashboard → Pengaturan Sistem** (khusus superadmin) menampilkan dan mengatur:
+
+- **Status sistem**: apakah scheduler benar-benar berjalan (detak tiap menit), versi PHP terhadap tambalan CVE, koneksi database, mode debug, HTTPS, kewajiban 2FA, whitelist login, ruang disk, dan hasil retensi terakhir. Item bermasalah diberi peringatan beserta cara memperbaikinya.
+- **Tugas terjadwal**: aktif/nonaktif, jam eksekusi, tombol **Simulasi** (dry-run: hanya menghitung) dan **Jalankan** manual, serta riwayat eksekusi.
+- **Skema durasi sesi**: Ketat (tidak aktif 20 menit, maks. 4 jam), Standar (30 menit, 8 jam), Longgar (2 jam, 24 jam), Kustom, atau ikut `.env`. Berlaku untuk semua sesi, termasuk pengunjung situs publik.
+- **Fitur**: buka/tutup penerimaan aduan baru (mis. saat pemeliharaan), notifikasi email, retensi data.
+
+Perubahan berlaku tanpa restart dan tercatat di Audit Log. **Whitelist login, kewajiban 2FA, host dan proxy tepercaya sengaja tidak bisa diubah dari web**: kesalahan di sana dapat mengunci semua pengguna atau melemahkan keamanan, jadi hanya lewat `.env` di server.
+
+**Scheduler.** Pada script on-premise, scheduler dijalankan cron tiap menit (`/etc/cron.d/csirt`). Pada Docker, service `scheduler` memanggil `schedule:run` tiap menit. Jangan mengganti dengan `schedule:work`: perintah itu memakai `proc_open` yang dimatikan oleh hardening PHP.
+
+## Notifikasi Email (Opsional)
+
+Secara default **tidak ada email yang dikirim**. Alur kerjanya:
+
+- Petugas memantau, membaca, dan menindaklanjuti aduan di **Dashboard → Aduan**.
+- Pelapor menyimpan nomor tiket yang tampil setelah mengirim aduan, lalu memantau perkembangan di halaman **Cek Status** (`/aduan/status`) dengan nomor tiket dan email.
+
+Untuk mengaktifkan email (tanda terima dan pembaruan status ke pelapor, serta pemberitahuan aduan baru ke tim):
+
+```dotenv
+MAIL_MAILER=smtp
+MAIL_HOST=smtp.instansi.go.id
+MAIL_PORT=587
+MAIL_USERNAME=noreply@instansi.go.id
+MAIL_PASSWORD='...'
+MAIL_FROM_ADDRESS="noreply@instansi.go.id"
+CSIRT_MAIL_NOTIFICATIONS=true
+CSIRT_TEAM_EMAIL=tim-csirt@instansi.go.id   # opsional
+```
+
+Lalu jalankan `php artisan optimize`. Isi aduan tidak pernah disertakan dalam email; email hanya berisi nomor tiket, status, dan tautan.
+
 ## Pemecahan Masalah
 
 | Gejala | Penyebab & solusi |
 |---|---|
 | `/csirt-login` selalu 404 | IP Anda tidak ada di `CSIRT_LOGIN_WHITELIST`, atau IP yang terbaca adalah IP proxy/gateway Docker (atur `set_real_ip_from`). Lihat IP yang terbaca di access log Nginx: `/var/log/nginx/csirt.access.log` (on-premise) atau `docker compose logs web` (Docker). |
+| Sesi admin tampak hilang saat membuka situs utama | Cookie sesi terikat ke nama host: `localhost` dan `127.0.0.1` adalah dua host berbeda. Sistem mengalihkan alias loopback ke host `APP_URL` secara otomatis; pastikan `APP_URL` sesuai alamat yang Anda pakai. |
+| 400 Bad Request di semua halaman | Host pada URL tidak dikenal. Akses lewat domain `APP_URL`, atau daftarkan alamat IP/domain tambahan di `CSIRT_TRUSTED_HOSTS`, lalu `php artisan optimize`. |
+| Status "Scheduler belum pernah berjalan" di Pengaturan Sistem | Docker: `docker compose ps scheduler` dan `docker compose logs scheduler`. On-premise: `systemctl status cron` dan isi `/etc/cron.d/csirt`. |
 | Error 419 setelah login | Situs diakses lewat HTTP biasa, sedangkan `SESSION_SECURE_COOKIE=true` membuat cookie tidak terkirim. Gunakan HTTPS. |
 | Gambar captcha tidak muncul | Ekstensi `gd` belum terpasang. |
 | Tampilan berantakan | Aset belum di-build (`npm run build`), atau `APP_URL` salah. |

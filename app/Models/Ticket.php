@@ -30,6 +30,7 @@ class Ticket extends Model
             'tlp' => Tlp::class,
             'incident_at' => 'datetime',
             'closed_at' => 'datetime',
+            'anonymized_at' => 'datetime',
         ];
     }
 
@@ -99,5 +100,14 @@ class Ticket extends Model
     public function auditLabel(): string
     {
         return $this->ticket_number;
+    }
+
+    /**
+     * Field berisi data pribadi pelapor atau detail insiden; isinya tidak ikut
+     * disalin ke audit log (lihat Concerns\Auditable).
+     */
+    public function auditPersonalData(): array
+    {
+        return ['reporter_name', 'reporter_email', 'reporter_phone', 'reporter_organization', 'reporter_ip', 'description', 'affected_asset'];
     }
 }

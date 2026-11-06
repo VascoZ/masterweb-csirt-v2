@@ -72,14 +72,14 @@ class InstallCommand extends Command
             'username' => $this->value('admin-username', 'ADMIN_USERNAME', fn () => text('Username superadmin', default: 'admin', required: true)),
             'email' => $this->value('admin-email', 'ADMIN_EMAIL', fn () => text('Email superadmin', required: true)),
             'password' => $this->value('admin-password', 'ADMIN_PASSWORD', fn () => password('Password superadmin', required: true,
-                hint: 'Min. 8 karakter, huruf besar & kecil, angka, simbol')),
+                hint: 'Min. 12 karakter, huruf besar & kecil, angka, simbol')),
         ];
 
         $validator = Validator::make($data, [
             'name' => ['required', 'string', 'max:255'],
             'username' => ['required', 'string', 'min:3', 'max:50', 'regex:/^[a-zA-Z0-9._-]+$/', 'unique:users'],
             'email' => ['required', 'email', 'unique:users'],
-            'password' => ['required', Password::min(8)->mixedCase()->letters()->numbers()->symbols()],
+            'password' => ['required', Password::defaults()],
         ]);
 
         if ($validator->fails()) {
@@ -141,8 +141,12 @@ class InstallCommand extends Command
             in_array('*', config('csirt.login_whitelist'), true) ? 'CSIRT_LOGIN_WHITELIST="*": halaman login terbuka untuk semua IP.' : null,
             ! config('csirt.enforce_2fa') ? 'CSIRT_ENFORCE_2FA=false: 2FA tidak diwajibkan.' : null,
             app()->isProduction() && ! str_starts_with((string) config('app.url'), 'https://') ? 'APP_URL tidak memakai https://.' : null,
-            config('mail.default') === 'log' ? 'MAIL_MAILER=log: email notifikasi aduan hanya ditulis ke log.' : null,
+            config('csirt.mail_notifications') && config('mail.default') === 'log' ? 'CSIRT_MAIL_NOTIFICATIONS=true tetapi MAIL_MAILER=log: email aduan hanya ditulis ke log.' : null,
         ]);
+
+        if (! config('csirt.mail_notifications')) {
+            $this->components->info('Notifikasi email aduan nonaktif: aduan dikelola melalui Dashboard → Aduan. Aktifkan dengan CSIRT_MAIL_NOTIFICATIONS=true setelah SMTP siap.');
+        }
 
         foreach ($warnings as $warning) {
             $this->components->warn($warning);

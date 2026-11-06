@@ -16,6 +16,10 @@ class User extends Authenticatable
 
     protected $fillable = ['name', 'username', 'email', 'password'];
 
+    protected $attributes = [
+        'is_active' => true,
+    ];
+
     protected $hidden = [
         'password',
         'remember_token',
@@ -30,6 +34,7 @@ class User extends Authenticatable
             'password' => 'hashed',
             'is_admin' => 'boolean',
             'is_superadmin' => 'boolean',
+            'is_active' => 'boolean',
             'two_factor_secret' => 'encrypted',
             'two_factor_recovery_codes' => 'encrypted:array',
             'two_factor_confirmed_at' => 'datetime',
@@ -69,5 +74,15 @@ class User extends Authenticatable
     public function hasTwoFactorEnabled(): bool
     {
         return $this->two_factor_secret !== null && $this->two_factor_confirmed_at !== null;
+    }
+
+    public function resetTwoFactor(): void
+    {
+        $this->forceFill([
+            'two_factor_secret' => null,
+            'two_factor_recovery_codes' => null,
+            'two_factor_confirmed_at' => null,
+            'two_factor_last_timestamp' => null,
+        ]);
     }
 }

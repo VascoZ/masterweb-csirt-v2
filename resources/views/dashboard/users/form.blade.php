@@ -11,10 +11,11 @@
     <x-form.input name="email" type="email" label="Email" :value="$user->email" required />
     <x-form.input name="password" type="password" :label="$user->exists ? 'Password baru (kosongkan bila tidak diubah)' : 'Password'"
         :required="! $user->exists" autocomplete="new-password"
-        help="Minimal 8 karakter, kombinasi huruf besar, huruf kecil, angka, dan simbol." />
+        help="Minimal 12 karakter, kombinasi huruf besar, huruf kecil, angka, dan simbol." />
 
     @if (! $user->exists || auth()->user()->can('changeRole', $user))
         <x-form.checkbox name="is_admin" label="Admin (kelola konten, aduan, dan advisory)" :checked="$user->is_admin" />
+        <x-form.checkbox name="is_active" label="Akun aktif (dapat login ke dashboard)" :checked="$user->is_active" />
         @if ($user->exists && $user->hasTwoFactorEnabled())
             <x-form.checkbox name="reset_2fa" label="Reset 2FA (pengguna harus mendaftarkan ulang aplikasi autentikator)" />
         @endif

@@ -37,5 +37,6 @@
         <env name="CSIRT_ENFORCE_2FA" value="true"/>
         <env name="APP_LOCALE" value="id"/>
         <env name="CSP_ENABLED" value="true"/>
+        <env name="CSIRT_SECURITY_LOG_CHANNEL" value="discard"/>
     </php>
 </phpunit>

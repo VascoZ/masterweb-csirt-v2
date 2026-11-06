@@ -22,7 +22,8 @@ Versi ini adalah pembaruan menyeluruh dari *MasterWebCSIRT 2022* (Laravel 8).
 - Peran: **Penulis** (draf artikel), **Admin** (konten, aduan, advisory), **Superadmin** (pengguna, audit log)
 - Penanganan aduan: status, penugasan petugas, catatan internal/publik, unduh lampiran (dengan hash SHA-256)
 - **2FA (TOTP)** dengan kode pemulihan, wajib secara default
-- **Audit log** append-only untuk login, perubahan data, unduhan bukti, dan aktivitas 2FA
+- **Audit log** append-only untuk login, perubahan data, unduhan bukti, penolakan akses, dan aktivitas 2FA
+- **Pengaturan Sistem** (superadmin): status kesehatan, tugas terjadwal (aktif/jam/jalankan manual/riwayat), skema durasi sesi, buka-tutup form aduan, notifikasi email, retensi data
 
 **Keamanan**
 - Content Security Policy berbasis nonce (tanpa `unsafe-inline`), header keamanan lengkap
@@ -62,6 +63,7 @@ Situs berjalan di `http://127.0.0.1:8080` dan halaman login ada di `/csirt-login
 |---|---|
 | [docs/DEPLOY.md](docs/DEPLOY.md) | Script instalasi otomatis, Docker Compose, instalasi manual, pemulihan akses admin |
 | [docs/HARDENING.md](docs/HARDENING.md) | Checklist hardening server, TLS, firewall, backup, catatan CVE PHP |
+| [docs/KEPATUHAN-KEAMANAN.md](docs/KEPATUHAN-KEAMANAN.md) | Hasil analisis whitebox dan pemetaan ke OWASP, ISO/IEC 27001, NIST |
 | [docs/MIGRASI-2022.md](docs/MIGRASI-2022.md) | Migrasi data dari MasterWebCSIRT 2022 |
 | [docs/nginx-host.conf.example](docs/nginx-host.conf.example) | Contoh Nginx host dengan TLS |
 
@@ -71,6 +73,7 @@ Situs berjalan di `http://127.0.0.1:8080` dan halaman login ada di `/csirt-login
 |---|---|
 | `php artisan csirt:install` | Instalasi awal: migrasi, superadmin pertama, konten awal, dan cek konfigurasi. Aman dijalankan ulang. |
 | `php artisan csirt:reset-admin <email>` | Memulihkan akses: password baru, reset 2FA, jadikan superadmin |
+| `php artisan csirt:prune [--dry-run]` | Terapkan kebijakan retensi data (otomatis tiap hari lewat scheduler) |
 
 ## Pengembangan (lokal)
 
@@ -87,7 +90,7 @@ php artisan key:generate
 touch database/database.sqlite
 php artisan migrate --seed      # data contoh; akun demo ditampilkan di terminal
 php artisan serve
-php artisan test                # 98 test, memakai SQLite in-memory
+php artisan test                # 138 test, memakai SQLite in-memory
 ```
 
 ## Lisensi

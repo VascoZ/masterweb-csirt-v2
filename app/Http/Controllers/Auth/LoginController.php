@@ -11,6 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
 
 class LoginController extends Controller
@@ -39,10 +40,20 @@ class LoginController extends Controller
         $credentials = $validator->validated();
         $user = User::where('email', $credentials['email'])->first();
 
-        if (! $user || ! Hash::check($credentials['password'], $user->password)) {
+        // Selalu jalankan verifikasi hash, termasuk bila email tidak terdaftar, agar
+        // waktu respons tidak membocorkan email mana yang ada (CWE-208).
+        $passwordValid = Hash::check($credentials['password'], $user?->password ?? self::dummyHash());
+
+        if (! $user || ! $passwordValid) {
             AuditLogger::log('login_failed', null, null, ['email' => $credentials['email']], 'Login gagal');
 
             return redirect()->route('login')->withInput($request->only('email'))->with('error', 'Email atau password salah.');
+        }
+
+        if (! $user->is_active) {
+            AuditLogger::log('login_failed', $user, description: 'Login ditolak: akun nonaktif', userId: $user->id);
+
+            return redirect()->route('login')->withInput($request->only('email'))->with('error', 'Akun Anda dinonaktifkan. Hubungi superadmin.');
         }
 
         // Akun dengan 2FA: simpan sementara di sesi, selesaikan di halaman tantangan.
@@ -56,11 +67,19 @@ class LoginController extends Controller
         return self::completeLogin($request, $user);
     }
 
+    private static function dummyHash(): string
+    {
+        static $hash;
+
+        return $hash ??= Hash::make(Str::random(40));
+    }
+
     public static function completeLogin(Request $request, User $user): RedirectResponse
     {
         Auth::login($user);
         $request->session()->regenerate();
         $request->session()->forget('login');
+        $request->session()->put('auth.started_at', now()->timestamp);
 
         Sessions::logoutOtherDevices($user);
 

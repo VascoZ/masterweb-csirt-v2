@@ -44,7 +44,9 @@ class DashboardPagesTest extends TestCase
             $url = route($route->getName(), $params);
 
             $response = $this->actingAs($super)->get($url);
-            $this->assertSame(200, $response->status(), "{$route->getName()} ({$url}) mengembalikan {$response->status()}");
+            // getStatusCode(): sebagian halaman berupa StreamedResponse (mis. ekspor CSV).
+            $status = $response->getStatusCode();
+            $this->assertSame(200, $status, "{$route->getName()} ({$url}) mengembalikan {$status}");
         }
     }
 

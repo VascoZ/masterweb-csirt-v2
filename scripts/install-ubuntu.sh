@@ -24,13 +24,17 @@
 #     KEY_FILE          Path private key                  (TLS_MODE=custom)
 #     LOGIN_WHITELIST   IP/CIDR yang boleh membuka halaman login
 #                       (default: jaringan privat 10/8, 172.16/12, 192.168/16)
+#     TRUSTED_HOSTS     Host tambahan yang diterima selain DOMAIN (mis. alamat IP server), pisahkan koma.
+#                       Host lain mendapat 400 Bad Request.
 #     SSH_ALLOW         IP/CIDR yang boleh SSH (default: semua, TIDAK disarankan)
 #     REPO_URL          Sumber kode git  (default: https://github.com/VascoZ/masterweb-csirt-v2.git)
 #     REPO_BRANCH       Branch git       (default: main)
 #     SOURCE_DIR        Pakai folder lokal sebagai sumber kode (server tanpa internet ke GitHub)
 #     APP_DIR           Lokasi aplikasi  (default: /var/www/csirt)
 #     MAIL_HOST, MAIL_PORT, MAIL_USERNAME, MAIL_PASSWORD, MAIL_FROM_ADDRESS, MAIL_ENCRYPTION
-#     TEAM_EMAIL        Email tim penerima notifikasi aduan
+#                       Opsional. Bila MAIL_HOST diisi, notifikasi email aduan diaktifkan.
+#                       Bila kosong (default), aduan dikelola lewat dashboard saja.
+#     TEAM_EMAIL        Email tim penerima notifikasi aduan (butuh MAIL_HOST)
 #     TICKET_PREFIX     Prefix nomor tiket (default: CSIRT)
 #     BACKUP_KEEP_DAYS  Lama penyimpanan backup harian (default: 14)
 #     SKIP_FIREWALL=1   Lewati konfigurasi UFW (mis. bila firewall dikelola perangkat lain)
@@ -284,6 +288,7 @@ set_env DB_USERNAME "$DB_USER"
 set_env DB_PASSWORD "$DB_PASSWORD"
 set_env SESSION_SECURE_COOKIE "$([[ $SCHEME == https ]] && echo true || echo false)"
 set_env CSIRT_LOGIN_WHITELIST "$LOGIN_WHITELIST"
+[[ -n "${TRUSTED_HOSTS:-}" ]] && set_env CSIRT_TRUSTED_HOSTS "$TRUSTED_HOSTS"
 set_env CSIRT_TICKET_PREFIX "$TICKET_PREFIX"
 [[ -n "${TEAM_EMAIL:-}" ]] && set_env CSIRT_TEAM_EMAIL "$TEAM_EMAIL"
 if [[ -n "${MAIL_HOST:-}" ]]; then
@@ -294,9 +299,11 @@ if [[ -n "${MAIL_HOST:-}" ]]; then
     set_env MAIL_PASSWORD "${MAIL_PASSWORD:-}"
     [[ -n "${MAIL_ENCRYPTION:-}" ]] && set_env MAIL_SCHEME "$MAIL_ENCRYPTION"
     set_env MAIL_FROM_ADDRESS "${MAIL_FROM_ADDRESS:-noreply@$DOMAIN}"
+    set_env CSIRT_MAIL_NOTIFICATIONS true
 elif [[ "${NEW_ENV:-0}" == 1 ]]; then
     set_env MAIL_MAILER log
-    warn "SMTP belum dikonfigurasi (MAIL_MAILER=log). Isi MAIL_* di $ENV_FILE agar notifikasi aduan terkirim."
+    set_env CSIRT_MAIL_NOTIFICATIONS false
+    ok "Notifikasi email aduan nonaktif (default). Aduan dikelola lewat Dashboard → Aduan."
 fi
 # Kredensial admin tidak pernah ditulis ke .env.
 for k in ADMIN_NAME ADMIN_USERNAME ADMIN_EMAIL ADMIN_PASSWORD; do set_env "$k" ""; done
@@ -401,8 +408,9 @@ if mariadb -N -e "SELECT COUNT(*) FROM \`$DB_NAME\`.users WHERE is_superadmin=1"
 else
     ask ADMIN_EMAIL "Email superadmin"
     while true; do
-        ask ADMIN_PASSWORD "Password superadmin (min. 8, huruf besar & kecil, angka, simbol)" "" secret
-        if [[ ${#ADMIN_PASSWORD} -ge 8 && "$ADMIN_PASSWORD" =~ [A-Z] && "$ADMIN_PASSWORD" =~ [a-z] && "$ADMIN_PASSWORD" =~ [0-9] && "$ADMIN_PASSWORD" =~ [^A-Za-z0-9] ]]; then break; fi
+        ask ADMIN_PASSWORD "Password superadmin (12-72 karakter, huruf besar & kecil, angka, simbol)" "" secret
+        # Harus sama dengan Password::defaults() di aplikasi (AppServiceProvider).
+        if [[ ${#ADMIN_PASSWORD} -ge 12 && ${#ADMIN_PASSWORD} -le 72 && "$ADMIN_PASSWORD" =~ [A-Z] && "$ADMIN_PASSWORD" =~ [a-z] && "$ADMIN_PASSWORD" =~ [0-9] && "$ADMIN_PASSWORD" =~ [^A-Za-z0-9] ]]; then break; fi
         [[ "${NONINTERACTIVE:-0}" == 1 ]] && die "ADMIN_PASSWORD tidak memenuhi kebijakan password."
         echo "  Password terlalu lemah, coba lagi."; ADMIN_PASSWORD=
     done
@@ -425,6 +433,15 @@ limit_req_zone $binary_remote_addr zone=csirt_login:10m rate=10r/m;
 limit_req_zone $binary_remote_addr zone=csirt_report:10m rate=6r/m;
 limit_req_zone $binary_remote_addr zone=csirt_general:10m rate=10r/s;
 limit_req_status 429;
+
+# Tolak request HTTP dengan header Host selain domain situs (mencegah Host header
+# poisoning). Pada HTTPS, aplikasi sendiri menolak Host di luar APP_URL (status 400).
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    server_name _;
+    return 444;
+}
 EOF
 install -d -m 0755 /var/www/letsencrypt
 rm -f /etc/nginx/sites-enabled/default
@@ -436,7 +453,7 @@ server {
     listen [::]:80;
     server_name $DOMAIN;
     location /.well-known/acme-challenge/ { root /var/www/letsencrypt; }
-    location / { return 301 https://\$host\$request_uri; }
+    location / { return 301 https://\$server_name\$request_uri; }
 }
 EOF
 }
@@ -521,7 +538,7 @@ server {
     listen [::]:80;
     server_name $DOMAIN;
     location /.well-known/acme-challenge/ { root /var/www/letsencrypt; }
-    location / { return 301 https://\$host\$request_uri; }
+    location / { return 301 https://\$server_name\$request_uri; }
 }
 
 server {

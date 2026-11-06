@@ -17,6 +17,8 @@ x-app-env: &app-env
     DB_USERNAME: ${DB_USERNAME:-csirt_app}
     DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD wajib diisi di .env}
     LOG_CHANNEL: stderr
+    # Jejak audit keamanan (JSON) ke stderr; kumpulkan dengan log driver Docker/SIEM.
+    CSIRT_SECURITY_LOG_CHANNEL: security_stderr
 
 services:
   app:
@@ -42,6 +44,36 @@ services:
       - /var/www/html/storage/framework/sessions:uid=82,gid=82
       - /var/www/html/storage/logs:uid=82,gid=82
       - /var/www/html/bootstrap/cache:uid=82,gid=82
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    networks: [backend]
+
+  # Tugas terjadwal (retensi data, dll. — lihat routes/console.php).
+  scheduler:
+    image: csirt-app:latest
+    <<: *app-env
+    # Loop schedule:run tiap menit (disejajarkan ke awal menit). JANGAN ganti dengan
+    # `schedule:work`: perintah itu memakai proc_open yang dimatikan di php.ini (disable_functions),
+    # sehingga container crash. Semua tugas kita berupa closure yang berjalan di proses yang sama.
+    command: ["sh", "-c", "while true; do php artisan schedule:run --no-interaction; sleep $$((60 - $$(date +%s) % 60)); done"]
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_healthy
+    volumes:
+      - public-uploads:/var/www/html/storage/app/public
+      - private-storage:/var/www/html/storage/app/private
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/www/html/storage/framework/cache:uid=82,gid=82
+      - /var/www/html/storage/framework/views:uid=82,gid=82
+      - /var/www/html/storage/framework/sessions:uid=82,gid=82
+      - /var/www/html/storage/logs:uid=82,gid=82
+      - /var/www/html/bootstrap/cache:uid=82,gid=82
+    healthcheck:
+      disable: true
     security_opt:
       - no-new-privileges:true
     cap_drop: [ALL]

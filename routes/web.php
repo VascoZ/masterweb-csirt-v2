@@ -26,14 +26,17 @@ Route::get('/posts', [PostController::class, 'index'])->name('posts.index');
 Route::get('/posts/{post}', [PostController::class, 'show'])->name('posts.show');
 
 Route::get('/advisories', [AdvisoryController::class, 'index'])->name('advisories.index');
+Route::get('/advisories/feed.xml', [AdvisoryController::class, 'feedAtom'])->name('advisories.feed.atom');
+Route::get('/advisories/feed.json', [AdvisoryController::class, 'feedJson'])->name('advisories.feed.json');
 Route::get('/advisories/{advisory}', [AdvisoryController::class, 'show'])->name('advisories.show');
 
 // Aduan insiden siber
-Route::get('/aduan', [TicketController::class, 'create'])->name('tickets.create');
-Route::post('/aduan', [TicketController::class, 'store'])->middleware('throttle:tickets')->name('tickets.store');
+Route::get('/aduan', [TicketController::class, 'create'])->middleware('tickets.open')->name('tickets.create');
+Route::post('/aduan', [TicketController::class, 'store'])->middleware(['tickets.open', 'throttle:tickets'])->name('tickets.store');
 Route::get('/aduan/terkirim', [TicketController::class, 'submitted'])->name('tickets.submitted');
 Route::get('/aduan/status', [TicketController::class, 'statusForm'])->name('tickets.status.form');
 Route::post('/aduan/status', [TicketController::class, 'status'])->middleware('throttle:ticket-status')->name('tickets.status');
+Route::post('/aduan/status/reply', [TicketController::class, 'reply'])->middleware('throttle:ticket-reply')->name('tickets.status.reply');
 
 // RFC 9116
 Route::get('/.well-known/security.txt', SecurityTxtController::class)->name('security-txt');
@@ -60,7 +63,7 @@ Route::post('/logout', [LoginController::class, 'destroy'])->middleware('auth')-
 | Dashboard
 |--------------------------------------------------------------------------
 */
-Route::prefix('dashboard')->name('dashboard.')->middleware(['auth', 'auth.session', '2fa'])->group(function () {
+Route::prefix('dashboard')->name('dashboard.')->middleware(['auth', 'auth.session', 'active', 'session.absolute', '2fa'])->group(function () {
     Route::get('/', Dashboard\DashboardController::class)->name('index');
 
     // Keamanan akun (dapat diakses walau 2FA belum aktif)
@@ -93,6 +96,7 @@ Route::prefix('dashboard')->name('dashboard.')->middleware(['auth', 'auth.sessio
         Route::resource('advisories', Dashboard\AdvisoryController::class);
 
         Route::get('tickets', [Dashboard\TicketController::class, 'index'])->name('tickets.index');
+        Route::get('tickets/export', [Dashboard\TicketController::class, 'export'])->name('tickets.export');
         Route::get('tickets/{ticket}', [Dashboard\TicketController::class, 'show'])->name('tickets.show');
         Route::put('tickets/{ticket}', [Dashboard\TicketController::class, 'update'])->name('tickets.update');
         Route::get('tickets/{ticket}/attachments/{attachment}', [Dashboard\TicketController::class, 'download'])->name('tickets.attachments.download');
@@ -102,6 +106,11 @@ Route::prefix('dashboard')->name('dashboard.')->middleware(['auth', 'auth.sessio
     Route::middleware('can:superadmin')->group(function () {
         Route::resource('users', Dashboard\UserController::class)->only(['index', 'create', 'store', 'edit', 'update']);
         Route::get('audit-logs', [Dashboard\AuditLogController::class, 'index'])->name('audit-logs.index');
+
+        // Pengaturan Sistem: status, tugas terjadwal, dan pengaturan fitur.
+        Route::get('system', [Dashboard\SystemController::class, 'index'])->name('system.index');
+        Route::put('system/settings', [Dashboard\SystemController::class, 'updateSettings'])->name('system.settings');
+        Route::post('system/tasks/{task}/run', [Dashboard\SystemController::class, 'runTask'])->middleware('throttle:6,1')->name('system.tasks.run');
     });
 });
 

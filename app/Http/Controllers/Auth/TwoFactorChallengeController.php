@@ -12,6 +12,8 @@ use Illuminate\View\View;
 
 class TwoFactorChallengeController extends Controller
 {
+    private const MAX_ATTEMPTS = 5;
+
     public function create(Request $request): View|RedirectResponse
     {
         if (! $this->pendingUser($request)) {
@@ -41,6 +43,16 @@ class TwoFactorChallengeController extends Controller
         if (! $valid) {
             AuditLogger::log('2fa_failed', $user, description: 'Kode 2FA salah', userId: $user->id);
 
+            // Setelah beberapa kali salah, login harus diulang dari awal (password + captcha),
+            // sehingga kode 2FA tidak bisa ditebak terus-menerus dalam satu sesi.
+            $attempts = (int) $request->session()->increment('login.attempts');
+            if ($attempts >= self::MAX_ATTEMPTS) {
+                $request->session()->forget('login');
+                AuditLogger::log('2fa_locked', $user, description: 'Login dibatalkan setelah ' . $attempts . ' kali kode 2FA salah', userId: $user->id);
+
+                return redirect()->route('login')->with('error', 'Terlalu banyak kode yang salah. Silakan login ulang.');
+            }
+
             return back()->with('error', 'Kode autentikasi tidak valid.');
         }
 
@@ -61,6 +73,14 @@ class TwoFactorChallengeController extends Controller
             return null;
         }
 
-        return User::find($pending['id']);
+        $user = User::find($pending['id']);
+
+        if (! $user || ! $user->is_active) {
+            $request->session()->forget('login');
+
+            return null;
+        }
+
+        return $user;
     }
 }

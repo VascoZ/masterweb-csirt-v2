@@ -4,6 +4,9 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex, nofollow">
+    {{-- Trix menyisipkan <style> lewat JavaScript; tanpa nonce, CSP memblokirnya sehingga
+         dialog tautan tampil terus dan kolom URL terkunci. Trix membaca meta ini. --}}
+    <meta name="csp-nonce" content="{{ app('csp-nonce') }}">
     <title>@hasSection('title')@yield('title') · @endif Dashboard {{ \App\Support\SiteData::name() }}</title>
     @if ($site['logo'])
         <link rel="icon" href="{{ asset('storage/' . $site['logo']->image) }}">
@@ -35,6 +38,7 @@
         'Administrasi' => [
             ['dashboard.users.index', 'people', 'Pengguna', $user->isSuperadmin()],
             ['dashboard.audit-logs.index', 'journal-check', 'Audit Log', $user->isSuperadmin()],
+            ['dashboard.system.index', 'sliders', 'Pengaturan Sistem', $user->isSuperadmin()],
         ],
     ];
     $initials = collect(explode(' ', $user->name))->filter()->take(2)->map(fn ($w) => mb_strtoupper(mb_substr($w, 0, 1)))->implode('');

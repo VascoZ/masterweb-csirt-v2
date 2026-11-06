@@ -20,7 +20,7 @@ trait Auditable
     public static function bootAuditable(): void
     {
         static::created(function (Model $model) {
-            AuditLogger::log('created', $model, null, static::auditValues($model->getAttributes()));
+            AuditLogger::log('created', $model, null, static::auditValues($model, $model->getAttributes()));
         });
 
         static::updated(function (Model $model) {
@@ -29,21 +29,26 @@ trait Auditable
                 return;
             }
             $old = array_intersect_key($model->getOriginal(), $changes);
-            AuditLogger::log('updated', $model, static::auditValues($old), static::auditValues($changes));
+            AuditLogger::log('updated', $model, static::auditValues($model, $old), static::auditValues($model, $changes));
         });
 
         static::deleted(function (Model $model) {
-            AuditLogger::log('deleted', $model, static::auditValues($model->getAttributes()), null);
+            AuditLogger::log('deleted', $model, static::auditValues($model, $model->getAttributes()), null);
         });
     }
 
-    protected static function auditValues(array $values): array
+    protected static function auditValues(Model $model, array $values): array
     {
         $values = array_diff_key($values, array_flip(static::$auditIgnored));
+        $personal = method_exists($model, 'auditPersonalData') ? $model->auditPersonalData() : [];
 
         foreach ($values as $key => $value) {
             if (in_array($key, static::$auditRedacted, true)) {
                 $values[$key] = '[disembunyikan]';
+            } elseif (in_array($key, $personal, true)) {
+                // Data pribadi tidak disalin ke audit log yang permanen (minimisasi data, UU PDP);
+                // yang dicatat hanya bahwa field ini ada/berubah.
+                $values[$key] = '[data pribadi]';
             } elseif (is_string($value) && mb_strlen($value) > 500) {
                 $values[$key] = mb_substr($value, 0, 500) . '…';
             }

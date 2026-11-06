@@ -54,6 +54,17 @@
                                 </li>
                             @endforeach
                         </ul>
+
+                        @unless ($ticket->status->isClosed())
+                            <hr class="my-4">
+                            <form action="{{ route('tickets.status.reply') }}" method="post">
+                                @csrf
+                                <input type="hidden" name="ticket_number" value="{{ $ticket->ticket_number }}">
+                                <input type="hidden" name="email" value="{{ $ticket->reporter_email }}">
+                                <x-form.textarea name="note" label="Tambahkan Keterangan / Balasan" rows="3" required placeholder="Tuliskan informasi tambahan terkait insiden ini..." />
+                                <button class="btn btn-outline-primary btn-sm"><i class="bi bi-send"></i> Kirim Keterangan</button>
+                            </form>
+                        @endunless
                     </div>
                 </div>
             @endisset

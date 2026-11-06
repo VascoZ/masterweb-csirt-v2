@@ -74,7 +74,7 @@
             <div class="card-body">
                 <x-form.input name="current_password" type="password" label="Password saat ini" required autocomplete="current-password" />
                 <x-form.input name="password" type="password" label="Password baru" required autocomplete="new-password"
-                    help="Minimal 8 karakter, kombinasi huruf besar, huruf kecil, angka, dan simbol." />
+                    help="Minimal 12 karakter, kombinasi huruf besar, huruf kecil, angka, dan simbol." />
                 <x-form.input name="password_confirmation" type="password" label="Ulangi password baru" required autocomplete="new-password" />
                 <div class="form-check mb-3">
                     <input class="form-check-input" type="checkbox" id="show-passwords" data-toggle-password="#current_password, #password, #password_confirmation">

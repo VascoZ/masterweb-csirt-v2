@@ -26,7 +26,13 @@
         </div>
     </form>
 
-    <p class="small text-secondary mb-3"><i class="bi bi-info-circle"></i> Halaman ini hanya memuat advisory berlabel <x-tlp :tlp="\App\Enums\Tlp::Clear" /> yang boleh disebarluaskan tanpa batasan.</p>
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+        <p class="small text-secondary mb-0"><i class="bi bi-info-circle"></i> Halaman ini hanya memuat advisory berlabel <x-tlp :tlp="\App\Enums\Tlp::Clear" /> yang boleh disebarluaskan tanpa batasan.</p>
+        <div class="d-flex gap-2">
+            <a href="{{ route('advisories.feed.atom') }}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-rss"></i> Atom/RSS</a>
+            <a href="{{ route('advisories.feed.json') }}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-filetype-json"></i> JSON Feed</a>
+        </div>
+    </div>
 
     @include('pages.advisories.partials.list', ['advisories' => $advisories])
     <div class="d-flex justify-content-center mt-4">{{ $advisories->links() }}</div>

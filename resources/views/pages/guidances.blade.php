@@ -6,6 +6,18 @@
 
 @section('content')
 <div class="container">
+    <form class="card card-body mb-4" action="{{ route('guidances') }}">
+        <div class="row g-2 align-items-center">
+            <div class="col-md-10">
+                <div class="input-group">
+                    <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                    <input type="search" name="search" class="form-control border-start-0" value="{{ request('search') }}" placeholder="Cari nama panduan..." aria-label="Cari panduan">
+                </div>
+            </div>
+            <div class="col-md-2 d-grid"><button class="btn btn-primary">Cari</button></div>
+        </div>
+    </form>
+
     @if ($guidances->count())
         <div class="row g-3 mb-4">
             @foreach ($guidances as $guidance)

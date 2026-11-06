@@ -6,6 +6,7 @@ use App\Enums\TicketStatus;
 use App\Models\Ticket;
 use App\Notifications\TicketReceived;
 use App\Notifications\TicketSubmittedToTeam;
+use App\Notifications\TicketUpdatedForReporter;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Notifications\AnonymousNotifiable;
@@ -26,7 +27,7 @@ class TicketTest extends TestCase
 
     public function test_public_can_submit_incident_report_with_attachment(): void
     {
-        config(['csirt.team_email' => 'tim@csirt.test', 'csirt.ticket_prefix' => 'TTIS']);
+        config(['csirt.mail_notifications' => true, 'csirt.team_email' => 'tim@csirt.test', 'csirt.ticket_prefix' => 'TTIS']);
 
         $response = $this->post('/aduan', $this->payload([
             'attachments' => [UploadedFile::fake()->createWithContent('bukti.txt', 'log serangan')],
@@ -46,6 +47,43 @@ class TicketTest extends TestCase
         Notification::assertSentTo(new AnonymousNotifiable, TicketSubmittedToTeam::class);
 
         $this->get(route('tickets.submitted'))->assertSee($ticket->ticket_number);
+    }
+
+    public function test_no_email_is_sent_by_default(): void
+    {
+        config(['csirt.team_email' => 'tim@csirt.test']);
+
+        $this->post('/aduan', $this->payload())->assertRedirect(route('tickets.submitted'));
+        $ticket = Ticket::firstOrFail();
+
+        $this->actingAs($this->user('admin'))->put("/dashboard/tickets/{$ticket->ticket_number}", [
+            'status' => 'in_progress', 'note' => 'Sedang dianalisis', 'is_public' => '1',
+        ])->assertRedirect();
+
+        $this->post('/aduan/status/reply', ['ticket_number' => $ticket->ticket_number, 'email' => 'pelapor@contoh.id', 'note' => 'Ada log tambahan'])
+            ->assertOk();
+
+        Notification::assertNothingSent();
+        $this->get(route('tickets.submitted'))->assertDontSee('dikirim ke email Anda');
+    }
+
+    public function test_reporter_can_reply_on_open_ticket_only(): void
+    {
+        $this->post('/aduan', $this->payload());
+        $ticket = Ticket::firstOrFail();
+
+        $this->post('/aduan/status/reply', ['ticket_number' => $ticket->ticket_number, 'email' => 'orang-lain@contoh.id', 'note' => 'Coba sisip'])
+            ->assertRedirect(route('tickets.status.form'));
+        $this->assertDatabaseMissing('ticket_updates', ['note' => '[Pelapor] Coba sisip']);
+
+        $this->post('/aduan/status/reply', ['ticket_number' => $ticket->ticket_number, 'email' => 'pelapor@contoh.id', 'note' => 'Log tambahan terlampir'])
+            ->assertOk()
+            ->assertSee('Log tambahan terlampir');
+
+        $ticket->forceFill(['status' => TicketStatus::Resolved])->save();
+        $this->post('/aduan/status/reply', ['ticket_number' => $ticket->ticket_number, 'email' => 'pelapor@contoh.id', 'note' => 'Setelah ditutup'])
+            ->assertRedirect(route('tickets.status.form'));
+        $this->assertDatabaseMissing('ticket_updates', ['note' => '[Pelapor] Setelah ditutup']);
     }
 
     public function test_reporter_cannot_set_status_or_ticket_number(): void
@@ -104,6 +142,7 @@ class TicketTest extends TestCase
 
     public function test_admin_updates_ticket_and_timeline_is_recorded(): void
     {
+        config(['csirt.mail_notifications' => true]);
         $this->post('/aduan', $this->payload());
         $ticket = Ticket::firstOrFail();
         $admin = $this->user('admin');
@@ -119,6 +158,7 @@ class TicketTest extends TestCase
         $this->assertNotNull($ticket->closed_at);
         $this->assertDatabaseHas('ticket_updates', ['ticket_id' => $ticket->id, 'status' => 'resolved', 'note' => 'Selesai ditangani', 'is_public' => true]);
         $this->assertDatabaseHas('audit_logs', ['event' => 'updated', 'auditable_type' => Ticket::class, 'auditable_id' => $ticket->id]);
+        Notification::assertSentTo(new AnonymousNotifiable, TicketUpdatedForReporter::class, fn ($n, $c, $notifiable) => $notifiable->routes['mail'] === 'pelapor@contoh.id');
     }
 
     public function test_attachments_are_only_downloadable_by_admin(): void

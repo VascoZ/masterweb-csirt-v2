@@ -1,0 +1,97 @@
+name: CI & Keamanan
+
+# Pemeriksaan otomatis di setiap push & pull request, serta mingguan untuk
+# menangkap kerentanan baru pada dependensi walau tidak ada perubahan kode.
+# Pemetaan standar: NIST SSDF PW.7/PW.8/RV.1, ISO/IEC 27001:2022 A.8.28/A.8.29,
+# OWASP SAMM Verification (lihat docs/KEPATUHAN-KEAMANAN.md).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '17 3 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test (PHP 8.5)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          extensions: gd, intl, pdo_sqlite, zip, bcmath, mbstring
+          coverage: none
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: composer install --no-interaction --no-progress --prefer-dist
+      - run: npm ci --no-audit --no-fund && npm run build
+      - run: cp .env.example .env && php artisan key:generate --force
+      - run: php artisan test
+
+  dependency-audit:
+    name: Audit dependensi
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          extensions: gd, intl, pdo_sqlite, zip, bcmath, mbstring
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: composer audit
+        run: composer audit --locked --no-interaction
+      - name: npm audit
+        run: npm audit --omit=dev --audit-level=moderate
+
+  sast:
+    name: SAST & secret scanning
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Semgrep
+        run: |
+          python3 -m pip install --quiet semgrep
+          semgrep scan --metrics=off --error --severity WARNING \
+            --config p/php --config p/secrets --config p/nginx --config p/dockerfile --config p/javascript \
+            --exclude vendor --exclude node_modules --exclude public/build --exclude tests .
+      - name: Gitleaks (secret scanning, termasuk riwayat git)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  shell:
+    name: Lint script
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: shellcheck -S warning scripts/*.sh docker/entrypoint.sh
+
+  image-scan:
+    name: Pindai image Docker
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build --target app -t csirt-app:ci .
+      - name: Trivy
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: csirt-app:ci
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: '1'

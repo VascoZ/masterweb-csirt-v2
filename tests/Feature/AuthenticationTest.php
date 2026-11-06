@@ -153,17 +153,47 @@ class AuthenticationTest extends TestCase
     {
         $user = $this->user();
 
-        $this->actingAs($user)->put('/dashboard/security/password', ['current_password' => 'salah', 'password' => 'Baru!2345x', 'password_confirmation' => 'Baru!2345x'])
+        $this->actingAs($user)->put('/dashboard/security/password', ['current_password' => 'salah', 'password' => 'Baru!234567x', 'password_confirmation' => 'Baru!234567x'])
             ->assertSessionHasErrors('current_password');
 
         $this->actingAs($user)->put('/dashboard/security/password', ['current_password' => 'Password!123', 'password' => 'lemah', 'password_confirmation' => 'lemah'])
             ->assertSessionHasErrors('password');
 
-        $this->actingAs($user)->put('/dashboard/security/password', ['current_password' => 'Password!123', 'password' => 'Baru!2345x', 'password_confirmation' => 'Baru!2345x'])
+        $this->actingAs($user)->put('/dashboard/security/password', ['current_password' => 'Password!123', 'password' => 'Baru!234567x', 'password_confirmation' => 'Baru!234567x'])
             ->assertSessionHas('success');
 
-        $this->assertTrue(\Hash::check('Baru!2345x', $user->fresh()->password));
+        $this->assertTrue(\Hash::check('Baru!234567x', $user->fresh()->password));
         $this->assertTrue(AuditLog::where('event', 'password_changed')->exists());
+    }
+
+    public function test_inactive_user_cannot_login_or_keep_active_session(): void
+    {
+        $user = $this->user('writer', ['is_active' => false]);
+
+        $this->post('/login', ['email' => $user->email, 'password' => 'Password!123', 'captcha' => 'x'])
+            ->assertRedirect(route('login'))
+            ->assertSessionHas('error');
+        $this->assertGuest();
+
+        $activeUser = $this->user();
+        $this->actingAs($activeUser)->get('/dashboard')->assertOk();
+
+        $activeUser->forceFill(['is_active' => false])->save();
+        $this->actingAs($activeUser)->get('/dashboard')->assertRedirect(route('login'));
+        $this->assertGuest();
+    }
+
+    public function test_absolute_session_lifetime_forces_reauthentication(): void
+    {
+        config(['csirt.session_absolute_minutes' => 60]);
+        $user = $this->user();
+
+        $this->actingAs($user)->withSession(['auth.started_at' => now()->timestamp])->get('/dashboard')->assertOk();
+
+        $this->travel(61)->minutes();
+        $this->actingAs($user)->get('/dashboard')->assertRedirect(route('login'));
+        $this->assertGuest();
+        $this->assertDatabaseHas('audit_logs', ['event' => 'session_expired', 'user_id' => $user->id]);
     }
 
     public function test_dashboard_requires_login(): void

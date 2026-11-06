@@ -16,7 +16,7 @@
                     <div class="form-section-title"><span class="step">1</span> Data pelapor</div>
                     <div class="row">
                         <div class="col-md-6"><x-form.input name="reporter_name" label="Nama lengkap *" required maxlength="255" autocomplete="name" /></div>
-                        <div class="col-md-6"><x-form.input name="reporter_email" type="email" label="Email *" required autocomplete="email" help="Tanda terima & nomor tiket dikirim ke email ini." /></div>
+                        <div class="col-md-6"><x-form.input name="reporter_email" type="email" label="Email *" required autocomplete="email" :help="config('csirt.mail_notifications') ? 'Tanda terima & nomor tiket dikirim ke email ini.' : 'Dipakai bersama nomor tiket untuk mengecek status aduan.'" /></div>
                         <div class="col-md-6"><x-form.input name="reporter_phone" type="tel" label="Nomor telepon" autocomplete="tel" /></div>
                         <div class="col-md-6"><x-form.input name="reporter_organization" label="Instansi / organisasi" autocomplete="organization" /></div>
                     </div>

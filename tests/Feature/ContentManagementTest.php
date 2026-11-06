@@ -130,9 +130,11 @@ class ContentManagementTest extends TestCase
         $this->actingAs($super)->post('/dashboard/users', ['name' => 'Baru', 'username' => 'baru', 'email' => 'baru@contoh.id', 'password' => '12345'])
             ->assertSessionHasErrors('password');
 
-        $this->actingAs($super)->post('/dashboard/users', ['name' => 'Baru', 'username' => 'baru', 'email' => 'baru@contoh.id', 'password' => 'Kuat!2345x', 'is_admin' => '1'])
+        $this->actingAs($super)->post('/dashboard/users', ['name' => 'Baru', 'username' => 'baru', 'email' => 'baru@contoh.id', 'password' => 'Kuat!234567x', 'is_admin' => '1', 'is_active' => '1'])
             ->assertRedirect();
 
-        $this->assertTrue(User::where('username', 'baru')->firstOrFail()->is_admin);
+        $created = User::where('username', 'baru')->firstOrFail();
+        $this->assertTrue($created->is_admin);
+        $this->assertTrue($created->is_active);
     }
 }

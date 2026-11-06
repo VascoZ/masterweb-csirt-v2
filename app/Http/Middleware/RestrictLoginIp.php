@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Support\AuditLogger;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\IpUtils;
@@ -19,6 +20,12 @@ class RestrictLoginIp
         if (in_array('*', $whitelist, true) || IpUtils::checkIp((string) $request->ip(), $whitelist)) {
             return $next($request);
         }
+
+        // Dicatat di log keamanan (bukan database) agar pemindaian tidak membanjiri audit log.
+        AuditLogger::security('login_ip_blocked', [
+            'path' => '/' . ltrim($request->path(), '/'),
+            'method' => $request->method(),
+        ]);
 
         abort(404);
     }

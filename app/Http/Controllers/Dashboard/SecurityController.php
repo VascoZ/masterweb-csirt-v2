@@ -104,11 +104,8 @@ class SecurityController extends Controller
             return back()->with('error', '2FA diwajibkan oleh kebijakan sistem dan tidak dapat dinonaktifkan.');
         }
 
-        $request->user()->forceFill([
-            'two_factor_secret' => null,
-            'two_factor_recovery_codes' => null,
-            'two_factor_confirmed_at' => null,
-        ])->save();
+        $request->user()->resetTwoFactor();
+        $request->user()->save();
 
         AuditLogger::log('2fa_disabled', $request->user(), description: '2FA dinonaktifkan');
 

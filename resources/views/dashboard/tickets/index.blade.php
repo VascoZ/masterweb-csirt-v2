@@ -23,7 +23,10 @@
             @endforeach
         </select>
     </div>
-    <div class="col-md-2 d-grid"><button class="btn btn-sm btn-outline-secondary"><i class="bi bi-funnel"></i> Filter</button></div>
+    <div class="col-md-2 d-flex gap-2">
+        <button class="btn btn-sm btn-outline-secondary flex-grow-1"><i class="bi bi-funnel"></i> Filter</button>
+        <a href="{{ route('dashboard.tickets.export', request()->only(['search', 'status', 'category'])) }}" class="btn btn-sm btn-outline-success" title="Ekspor CSV"><i class="bi bi-download"></i> CSV</a>
+    </div>
 </form>
 
 <div class="table-responsive">

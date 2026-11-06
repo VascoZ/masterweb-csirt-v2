@@ -36,8 +36,10 @@ class AuthorizationTest extends TestCase
 
     public function test_only_superadmin_manages_users_and_audit_logs(): void
     {
-        $this->actingAs($this->user('admin'))->get('/dashboard/users')->assertForbidden();
-        $this->actingAs($this->user('admin'))->get('/dashboard/audit-logs')->assertForbidden();
+        $admin = $this->user('admin');
+        $this->actingAs($admin)->get('/dashboard/users')->assertForbidden();
+        $this->actingAs($admin)->get('/dashboard/audit-logs')->assertForbidden();
+        $this->assertDatabaseHas('audit_logs', ['event' => 'access_denied', 'user_id' => $admin->id]);
 
         $super = $this->user('superadmin');
         $this->actingAs($super)->get('/dashboard/users')->assertOk();

@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\User;
 use App\Support\AuditLogger;
+use App\Support\Sessions;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rules\Password;
@@ -42,12 +43,12 @@ class ResetAdminCommand extends Command
 
                 return self::FAILURE;
             }
-            $plain = password('Password baru', required: true, hint: 'Min. 8 karakter, huruf besar & kecil, angka, simbol');
+            $plain = password('Password baru', required: true, hint: 'Min. 12 karakter, huruf besar & kecil, angka, simbol');
         }
 
         $data = ['password' => $plain, 'email' => $this->option('new-email') ?: $user->email];
         $validator = Validator::make($data, [
-            'password' => ['required', Password::min(8)->mixedCase()->letters()->numbers()->symbols()],
+            'password' => ['required', Password::defaults()],
             'email' => ['required', 'email', 'unique:users,email,' . $user->id],
         ]);
 
@@ -63,12 +64,14 @@ class ResetAdminCommand extends Command
         $user->password = $plain;
         $user->is_admin = true;
         $user->is_superadmin = true;
+        $user->is_active = true;
 
         if (! $this->option('keep-2fa')) {
-            $user->forceFill(['two_factor_secret' => null, 'two_factor_recovery_codes' => null, 'two_factor_confirmed_at' => null, 'two_factor_last_timestamp' => null]);
+            $user->resetTwoFactor();
         }
 
         $user->save();
+        Sessions::terminateAll($user);
         AuditLogger::log('admin_reset', $user, description: 'Akses superadmin dipulihkan lewat konsol (csirt:reset-admin)');
 
         $this->components->info("Akun {$user->email} sekarang superadmin dengan password baru.");

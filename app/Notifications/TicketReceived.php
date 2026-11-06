@@ -29,7 +29,10 @@ class TicketReceived extends Notification
     {
         return (new MailMessage)
             ->subject('[' . $this->ticket->ticket_number . '] Aduan Anda telah diterima')
-            ->greeting('Yth. ' . $this->ticket->reporter_name . ',')
+            // Jangan masukkan input pelapor (nama, dll.) ke email: isinya dirender sebagai
+            // Markdown dan alamat tujuan diisi pelapor sendiri, sehingga bisa disalahgunakan
+            // untuk menyisipkan tautan phishing ke email resmi CSIRT.
+            ->greeting('Yth. Pelapor,')
             ->line('Terima kasih, aduan insiden siber Anda telah kami terima dengan nomor tiket:')
             ->line('**' . $this->ticket->ticket_number . '**')
             ->line('Simpan nomor tiket ini. Status penanganan dapat dicek menggunakan nomor tiket dan alamat email Anda.')
