@@ -31,6 +31,17 @@ Versi ini adalah pembaruan menyeluruh dari *MasterWebCSIRT 2022* (Laravel 8).
 - Whitelist IP (mendukung CIDR) untuk halaman login
 - Upload: nama file acak, validasi tipe, SVG ditolak, bukti aduan di disk privat
 
+## Instalasi On-Premise (Ubuntu 22.04 / 24.04)
+
+Satu perintah untuk memasang seluruh stack (Nginx, PHP-FPM 8.3, MariaDB, TLS, firewall, fail2ban, backup harian):
+
+```bash
+git clone https://github.com/VascoZ/masterweb-csirt-v2.git /tmp/csirt
+sudo bash /tmp/csirt/scripts/install-ubuntu.sh
+```
+
+Opsi lengkap dan mode non-interaktif: [docs/DEPLOY.md](docs/DEPLOY.md#script-instalasi-otomatis-ubuntu).
+
 ## Mulai Cepat (Docker)
 
 ```bash

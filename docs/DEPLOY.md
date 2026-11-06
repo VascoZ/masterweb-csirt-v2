@@ -1,9 +1,62 @@
 # Panduan Deploy
 
-Ada dua cara memasang situs CSIRT:
+Ada tiga cara memasang situs CSIRT:
 
-- **A. Docker Compose**: disarankan. Semua komponen (PHP-FPM, Nginx, MariaDB) sudah dikonfigurasi dan di-hardening.
-- **B. Manual**: di server Ubuntu 24.04 LTS dengan Nginx, PHP-FPM 8.3, dan MariaDB.
+- **Script otomatis (on-premise)**: satu perintah di server Ubuntu 22.04/24.04 yang masih kosong. Lihat bagian [berikut](#script-instalasi-otomatis-ubuntu).
+- **A. Docker Compose**: semua komponen (PHP-FPM, Nginx, MariaDB) sudah dikonfigurasi dan di-hardening.
+- **B. Manual**: langkah demi langkah di Ubuntu dengan Nginx, PHP-FPM 8.3, dan MariaDB.
+
+---
+
+## Script Instalasi Otomatis (Ubuntu)
+
+[`scripts/install-ubuntu.sh`](../scripts/install-ubuntu.sh) memasang seluruh stack di server Ubuntu Server **22.04 atau 24.04 LTS**:
+
+- Nginx, PHP-FPM 8.3 (pool khusus dengan `open_basedir`), MariaDB (hanya `127.0.0.1`), Composer, dan Node.js (hanya untuk build aset)
+- Aplikasi di `/var/www/csirt`: kode milik user `csirt` dan read-only bagi PHP; hanya `storage/` yang bisa ditulis
+- TLS: Let's Encrypt, sertifikat instansi, atau self-signed
+- UFW, fail2ban (SSH dan rate limit Nginx), unattended-upgrades, chrony
+- Backup harian pukul 02:15 ke `/var/backups/csirt`, serta cron scheduler Laravel
+
+### Interaktif
+
+```bash
+git clone https://github.com/VascoZ/masterweb-csirt-v2.git /tmp/csirt
+sudo bash /tmp/csirt/scripts/install-ubuntu.sh
+```
+
+Script akan menanyakan domain, nama tim, mode TLS, whitelist login, email, dan password superadmin.
+
+### Non-interaktif
+
+```bash
+sudo DOMAIN=csirt.contoh.go.id SITE_NAME="Contoh-CSIRT" \
+     TLS_MODE=letsencrypt LE_EMAIL=admin@contoh.go.id \
+     ADMIN_EMAIL=admin@contoh.go.id ADMIN_PASSWORD='Ganti!Password123' \
+     LOGIN_WHITELIST="10.10.0.0/16" SSH_ALLOW="10.10.0.0/16" \
+     MAIL_HOST=smtp.contoh.go.id MAIL_USERNAME=noreply@contoh.go.id MAIL_PASSWORD='...' \
+     NONINTERACTIVE=1 bash /tmp/csirt/scripts/install-ubuntu.sh
+```
+
+| Variabel | Keterangan |
+|---|---|
+| `TLS_MODE` | `letsencrypt` (DNS publik dan port 80 harus terbuka), `custom` (isi `CERT_FILE` dan `KEY_FILE` dengan sertifikat instansi), `selfsigned` (uji/internal), atau `none` (HTTP saja, bukan untuk produksi) |
+| `LOGIN_WHITELIST` | IP/CIDR yang boleh membuka `/csirt-login`. Default: jaringan privat. |
+| `SSH_ALLOW` | IP/CIDR yang boleh SSH. **Isi untuk produksi**; bila kosong, SSH terbuka untuk semua IP. |
+| `SOURCE_DIR` | Untuk server tanpa akses ke GitHub: salin kode ke server, lalu arahkan ke foldernya |
+| `SKIP_FIREWALL=1` | Lewati UFW bila firewall dikelola perangkat jaringan |
+
+Daftar lengkap variabel ada di bagian atas script. Script **aman dijalankan ulang**: database, `APP_KEY`, dan superadmin yang sudah ada tidak ditimpa. Kredensial admin tidak pernah ditulis ke `.env`.
+
+Setelah selesai, ringkasan instalasi (termasuk password database) disimpan di `/root/csirt-install-info.txt` dan hanya bisa dibaca root.
+
+### Update
+
+```bash
+sudo bash /var/www/csirt/scripts/update-ubuntu.sh
+```
+
+Urutannya: backup → mode pemeliharaan → `git pull` (atau `SOURCE_DIR=...`) → Composer dan build aset → migrasi → cache → reload PHP-FPM → situs online kembali. Bila salah satu langkah gagal, situs otomatis dikeluarkan dari mode pemeliharaan.
 
 Untuk kedua cara, siapkan terlebih dahulu:
 
