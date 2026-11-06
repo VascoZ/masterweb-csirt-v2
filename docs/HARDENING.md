@@ -17,7 +17,7 @@ Checklist ini melengkapi pengamanan yang sudah ada di dalam aplikasi (CSP, 2FA, 
 
 ## 2. TLS dan Header (Nginx host)
 
-Sudah ada di [nginx-host.conf.example](nginx-host.conf.example):
+Sudah diterapkan oleh `install-ubuntu.sh` dan [nginx-host.conf.example](nginx-host.conf.example):
 
 - [ ] Hanya TLS 1.2 dan 1.3; HTTP dialihkan ke HTTPS
 - [ ] HSTS `max-age=31536000; includeSubDomains` (tambahkan `preload` hanya bila yakin)
@@ -41,6 +41,12 @@ Header yang dikirim aplikasi:
 ## 3. Sistem Operasi
 
 - [ ] Pembaruan keamanan otomatis: `sudo apt install unattended-upgrades && sudo dpkg-reconfigure unattended-upgrades`
+- [ ] Bila PHP dipasang dari PPA `ondrej/php`, izinkan PPA itu di unattended-upgrades. Secara default hanya repo security Ubuntu yang diperbarui otomatis. `install-ubuntu.sh` sudah melakukannya; untuk instalasi manual:
+  ```bash
+  printf 'Unattended-Upgrade::Allowed-Origins {\n    "LP-PPA-ondrej-php:${distro_codename}";\n};\n' \
+    | sudo tee /etc/apt/apt.conf.d/51csirt-unattended-upgrades
+  sudo unattended-upgrade --dry-run -d 2>&1 | grep "Allowed origins"   # harus memuat o=LP-PPA-ondrej-php
+  ```
 - [ ] Firewall hanya membuka 22 (dibatasi IP admin), 80, dan 443:
   ```bash
   sudo ufw default deny incoming
@@ -55,14 +61,25 @@ Header yang dikirim aplikasi:
 
 ## 4. PHP
 
-Sudah diterapkan di image Docker ([docker/php/security.ini](../docker/php/security.ini)). Untuk instalasi manual, salin ke `conf.d`:
+Sudah diterapkan di image Docker ([docker/php/security.ini](../docker/php/security.ini) dan [docker/php/www.conf](../docker/php/www.conf)) dan oleh `install-ubuntu.sh`. Untuk instalasi manual, lihat [DEPLOY.md bagian 3.4](DEPLOY.md#34-php-fpm).
 
 - `expose_php = Off`, `display_errors = Off`
 - `allow_url_fopen = Off`, `allow_url_include = Off`
 - `disable_functions = exec,passthru,shell_exec,system,proc_open,popen,...`
 - `session.use_strict_mode = 1`
 - Batas unggah `upload_max_filesize = 10M`, `post_max_size = 30M`
-- OPcache aktif dengan `validate_timestamps = 0`. Setelah update kode, jalankan `systemctl reload php8.3-fpm`.
+- `session.upload_progress.enabled = 0` dan `max_input_nesting_level = 32` (di `php.ini`/`conf.d`), serta `pm.max_requests = 200` (di file pool FPM): mitigasi tambahan untuk CVE-2026-109618 dan CVE-2026-109619 (lihat di bawah)
+- `open_basedir` membatasi PHP pada folder aplikasi dan `/tmp` (pool on-premise dari `install-ubuntu.sh`)
+- OPcache aktif dengan `validate_timestamps = 0`. Setelah update kode, jalankan `sudo systemctl reload php8.5-fpm` (sudah dilakukan otomatis oleh `update-ubuntu.sh` dan oleh restart container Docker).
+
+### CVE-2026-109618 & CVE-2026-109619 (RCE di PHP, CVSS 9.2)
+
+- Terdampak: PHP 8.2 < 8.2.35, 8.3 < 8.3.36, 8.4 < 8.4.27, 8.5 < 8.5.12.
+- Template ini memakai **PHP 8.5.12** (Docker dan on-premise), yang sudah memuat tambalannya. Script instalasi memperingatkan bila versi yang terpasang lebih lama.
+- Advisory resmi menyatakan **update PHP adalah satu-satunya mitigasi lengkap**. Pengaturan di atas hanya mengurangi peluang eksploitasi.
+- Konfigurasi template menghindari jalur eksploitasi yang sudah terbukti: tidak memakai Apache mod_php atau `.htaccess`, dan Nginx tidak meneruskan `PHP_VALUE`/`PHP_ADMIN_VALUE`. Pertahankan hal ini bila Anda mengubah konfigurasi server.
+- Referensi: [GHSA-w8hw-w9fx-j79w](https://github.com/php/php-src/security/advisories/GHSA-w8hw-w9fx-j79w), [GHSA-6wmf-4rv5-p3rp](https://github.com/php/php-src/security/advisories/GHSA-6wmf-4rv5-p3rp)
+- Cek versi PHP: `php -v` di server, atau `docker compose exec app php -v` pada Docker. Harus 8.5.12 atau lebih baru.
 
 ## 5. Container (bila memakai Docker)
 
@@ -81,7 +98,7 @@ Tambahan yang disarankan:
 
 ## 6. Backup dan Pemulihan
 
-- [ ] Backup harian database dan kedua volume file (lihat [DEPLOY.md](DEPLOY.md#6-operasional))
+- [ ] Backup harian database dan file. Pada `install-ubuntu.sh` sudah terjadwal otomatis (`/usr/local/sbin/csirt-backup`, pukul 02:15). Pada Docker, jadwalkan sendiri perintah di [DEPLOY.md bagian 2.6](DEPLOY.md#26-operasional).
 - [ ] Backup dienkripsi (mis. `gpg --symmetric` atau `age`) dan disimpan di luar server
 - [ ] **Uji pemulihan** minimal tiap 3 bulan
 - [ ] Retensi bukti aduan mengikuti kebijakan instansi dan peraturan yang berlaku

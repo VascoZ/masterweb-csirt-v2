@@ -1,33 +1,45 @@
 # Panduan Deploy
 
-Ada tiga cara memasang situs CSIRT:
+Ada tiga cara memasang situs CSIRT. Pilih salah satu:
 
-- **Script otomatis (on-premise)**: satu perintah di server Ubuntu 22.04/24.04 yang masih kosong. Lihat bagian [berikut](#script-instalasi-otomatis-ubuntu).
-- **A. Docker Compose**: semua komponen (PHP-FPM, Nginx, MariaDB) sudah dikonfigurasi dan di-hardening.
-- **B. Manual**: langkah demi langkah di Ubuntu dengan Nginx, PHP-FPM 8.3, dan MariaDB.
+| Cara | Cocok untuk | Bagian |
+|---|---|---|
+| **Script otomatis** | Server Ubuntu 22.04/24.04 yang masih kosong (on-premise). **Paling disarankan.** | [1](#1-script-instalasi-otomatis-ubuntu) |
+| **Docker Compose** | Server yang sudah memakai Docker | [2](#2-docker-compose) |
+| **Manual** | Administrator yang ingin memasang langkah demi langkah | [3](#3-instalasi-manual-ubuntu) |
+
+**Persiapan untuk semua cara:**
+
+- Domain/subdomain, misalnya `csirt.contoh.go.id`, yang mengarah ke IP server.
+- Sertifikat TLS: Let's Encrypt (butuh port 80 terbuka dari internet) atau sertifikat instansi.
+- Akun SMTP untuk mengirim notifikasi aduan.
+- Daftar IP/subnet kantor atau VPN yang boleh membuka halaman login dan SSH.
 
 ---
 
-## Script Instalasi Otomatis (Ubuntu)
+## 1. Script Instalasi Otomatis (Ubuntu)
 
-[`scripts/install-ubuntu.sh`](../scripts/install-ubuntu.sh) memasang seluruh stack di server Ubuntu Server **22.04 atau 24.04 LTS**:
+[`scripts/install-ubuntu.sh`](../scripts/install-ubuntu.sh) memasang seluruh stack di **Ubuntu Server 22.04 atau 24.04 LTS** yang masih kosong:
 
-- Nginx, PHP-FPM 8.3 (pool khusus dengan `open_basedir`), MariaDB (hanya `127.0.0.1`), Composer, dan Node.js (hanya untuk build aset)
-- Aplikasi di `/var/www/csirt`: kode milik user `csirt` dan read-only bagi PHP; hanya `storage/` yang bisa ditulis
+- Nginx, PHP-FPM 8.5 (pool khusus dengan `open_basedir`), MariaDB (hanya `127.0.0.1`), Composer, dan Node.js (hanya untuk build aset)
+- Aplikasi di `/var/www/csirt`. Kode milik user `csirt` dan read-only bagi PHP; hanya `storage/` dan `bootstrap/cache/` yang bisa ditulis.
 - TLS: Let's Encrypt, sertifikat instansi, atau self-signed
 - UFW, fail2ban (SSH dan rate limit Nginx), unattended-upgrades, chrony
 - Backup harian pukul 02:15 ke `/var/backups/csirt`, serta cron scheduler Laravel
 
-### Interaktif
+> **Tentang PHP 8.5:** repo resmi Ubuntu 22.04/24.04 belum menyediakan PHP 8.5, jadi script memasangnya dari PPA [`ondrej/php`](https://launchpad.net/~ondrej/+archive/ubuntu/php) (dikelola Ondřej Surý, maintainer paket PHP Debian). Patch keamanan PHP datang dari PPA ini, bukan dari Canonical. Script mendaftarkan PPA tersebut ke unattended-upgrades agar patch PHP ikut terpasang otomatis, dan memperingatkan bila versi PHP terpasang di bawah 8.5.12 (belum memuat tambalan CVE-2026-109618/109619). Pastikan penggunaan PPA ini sesuai kebijakan instansi Anda.
+
+### Mode interaktif
 
 ```bash
+sudo apt install -y git
 git clone https://github.com/VascoZ/masterweb-csirt-v2.git /tmp/csirt
 sudo bash /tmp/csirt/scripts/install-ubuntu.sh
 ```
 
-Script akan menanyakan domain, nama tim, mode TLS, whitelist login, email, dan password superadmin.
+Script akan menanyakan domain, nama tim, mode TLS, email Let's Encrypt, whitelist login, serta email dan password superadmin. Kode aplikasi diambil ulang dari GitHub ke `/var/www/csirt`. Folder `/tmp/csirt` hanya dipakai untuk menjalankan script dan boleh dihapus sesudahnya.
 
-### Non-interaktif
+### Mode non-interaktif
 
 ```bash
 sudo DOMAIN=csirt.contoh.go.id SITE_NAME="Contoh-CSIRT" \
@@ -40,60 +52,72 @@ sudo DOMAIN=csirt.contoh.go.id SITE_NAME="Contoh-CSIRT" \
 
 | Variabel | Keterangan |
 |---|---|
-| `TLS_MODE` | `letsencrypt` (DNS publik dan port 80 harus terbuka), `custom` (isi `CERT_FILE` dan `KEY_FILE` dengan sertifikat instansi), `selfsigned` (uji/internal), atau `none` (HTTP saja, bukan untuk produksi) |
-| `LOGIN_WHITELIST` | IP/CIDR yang boleh membuka `/csirt-login`. Default: jaringan privat. |
-| `SSH_ALLOW` | IP/CIDR yang boleh SSH. **Isi untuk produksi**; bila kosong, SSH terbuka untuk semua IP. |
-| `SOURCE_DIR` | Untuk server tanpa akses ke GitHub: salin kode ke server, lalu arahkan ke foldernya |
+| `TLS_MODE` | `letsencrypt` (DNS publik dan port 80 harus terbuka), `custom` (isi `CERT_FILE` dan `KEY_FILE` dengan path sertifikat instansi), `selfsigned` (uji/internal), atau `none` (HTTP saja, bukan untuk produksi) |
+| `LOGIN_WHITELIST` | IP/CIDR yang boleh membuka `/csirt-login`. Default: jaringan privat (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`). |
+| `SSH_ALLOW` | IP/CIDR yang boleh SSH. **Wajib diisi untuk produksi**; bila kosong, SSH terbuka untuk semua IP. |
+| `SOURCE_DIR` | Untuk server tanpa akses ke GitHub: salin folder kode ke server, lalu arahkan ke folder itu |
 | `SKIP_FIREWALL=1` | Lewati UFW bila firewall dikelola perangkat jaringan |
+| `MAIL_*`, `TEAM_EMAIL` | SMTP dan penerima notifikasi aduan. Bila kosong, email hanya ditulis ke log. |
 
-Daftar lengkap variabel ada di bagian atas script. Script **aman dijalankan ulang**: database, `APP_KEY`, dan superadmin yang sudah ada tidak ditimpa. Kredensial admin tidak pernah ditulis ke `.env`.
+Daftar lengkap variabel ada di bagian atas script.
 
-Setelah selesai, ringkasan instalasi (termasuk password database) disimpan di `/root/csirt-install-info.txt` dan hanya bisa dibaca root.
+- Script **aman dijalankan ulang**: database, `APP_KEY`, dan superadmin yang sudah ada tidak ditimpa.
+- Kredensial admin tidak pernah ditulis ke `.env`.
+- Setelah selesai, ringkasan instalasi (termasuk password database) disimpan di `/root/csirt-install-info.txt`, yang hanya bisa dibaca root.
+- Log lengkap instalasi: `/var/log/csirt-install.log`.
 
 ### Update
 
 ```bash
+# Bila diinstal dari GitHub (default)
 sudo bash /var/www/csirt/scripts/update-ubuntu.sh
+
+# Bila diinstal dengan SOURCE_DIR (tanpa git): salin kode baru ke server terlebih dahulu
+sudo SOURCE_DIR=/path/kode-baru bash /var/www/csirt/scripts/update-ubuntu.sh
 ```
 
-Urutannya: backup → mode pemeliharaan → `git pull` (atau `SOURCE_DIR=...`) → Composer dan build aset → migrasi → cache → reload PHP-FPM → situs online kembali. Bila salah satu langkah gagal, situs otomatis dikeluarkan dari mode pemeliharaan.
+Urutannya: backup → mode pemeliharaan → ambil kode → Composer dan build aset → migrasi → cache → reload PHP-FPM → situs online kembali. Bila salah satu langkah gagal, situs otomatis dikeluarkan dari mode pemeliharaan.
 
-Untuk kedua cara, siapkan terlebih dahulu:
+### Perintah artisan
 
-- Domain/subdomain, misalnya `csirt.contoh.go.id`.
-- Sertifikat TLS (Let's Encrypt atau sertifikat instansi).
-- Akun SMTP untuk mengirim notifikasi aduan.
-- Daftar IP/subnet kantor atau VPN yang boleh membuka halaman login.
+Di server hasil script, jalankan artisan sebagai `www-data` dari folder aplikasi:
+
+```bash
+cd /var/www/csirt && sudo -u www-data php artisan <perintah>
+```
 
 ---
 
-## A. Docker Compose
+## 2. Docker Compose
 
-### 1. Prasyarat
+### 2.1 Prasyarat
 
 - Docker Engine 24+ dan plugin Docker Compose v2
 - RAM minimal 2 GB, disk 10 GB
 
-### 2. Konfigurasi
+### 2.2 Konfigurasi
 
 ```bash
-git clone <repo> /opt/csirt && cd /opt/csirt   # atau salin folder template-csirt-v2
+git clone https://github.com/VascoZ/masterweb-csirt-v2.git csirt
+cd csirt
 cp .env.docker.example .env
 chmod 600 .env
+echo "APP_KEY=base64:$(openssl rand -base64 32)"   # salin hasilnya ke APP_KEY di .env
+openssl rand -hex 24                               # jalankan dua kali: untuk DB_PASSWORD & DB_ROOT_PASSWORD
 ```
 
 Isi minimal di `.env`:
 
 | Variabel | Keterangan |
 |---|---|
-| `APP_KEY` | Buat dengan `docker compose run --rm --no-deps app php artisan key:generate --show` |
+| `APP_KEY` | Hasil perintah `openssl rand` di atas (diawali `base64:`) |
 | `APP_URL` | Alamat publik, wajib `https://` |
-| `DB_PASSWORD`, `DB_ROOT_PASSWORD` | Password acak yang kuat, misalnya `openssl rand -hex 24` |
+| `DB_PASSWORD`, `DB_ROOT_PASSWORD` | Password acak yang kuat. Bila mengandung `$`, apit dengan kutip tunggal. |
 | `CSIRT_LOGIN_WHITELIST` | IP/CIDR kantor atau VPN, misalnya `10.10.0.0/16,203.0.113.5` |
 | `MAIL_*` | Akun SMTP |
-| `ADMIN_EMAIL`, `ADMIN_PASSWORD` | Superadmin pertama, dibuat otomatis saat start pertama |
+| `ADMIN_EMAIL`, `ADMIN_PASSWORD` | Superadmin pertama, dibuat otomatis saat container pertama kali berjalan |
 
-### 3. Jalankan
+### 2.3 Jalankan
 
 ```bash
 docker compose up -d --build
@@ -106,23 +130,42 @@ Saat start, container `app` otomatis menjalankan:
 2. `csirt:install`: membuat superadmin bila belum ada (idempoten)
 3. `optimize`: cache config, route, view, dan event
 
-Setelah superadmin terbuat, **hapus `ADMIN_PASSWORD` dari `.env`** lalu jalankan `docker compose up -d`.
+Setelah superadmin terbuat, **hapus nilai `ADMIN_PASSWORD` dari `.env`** lalu jalankan `docker compose up -d`.
 
-### 4. Pasang TLS
+> **Uji coba lokal tanpa HTTPS** (`http://127.0.0.1:8080`): set `SESSION_SECURE_COOKIE=false` (tanpa itu login akan gagal dengan error 419), lalu tambahkan `172.16.0.0/12` ke `CSIRT_LOGIN_WHITELIST`, karena request dari host masuk dengan IP gateway Docker. Kembalikan kedua nilai ini sebelum produksi.
 
-Container `web` hanya mendengarkan `127.0.0.1:8080` (diatur lewat `HTTP_BIND`). Pasang Nginx di host sebagai terminator TLS dengan konfigurasi [nginx-host.conf.example](nginx-host.conf.example):
+### 2.4 Pasang TLS dengan Nginx di host
+
+Container `web` hanya mendengarkan `127.0.0.1:8080` (diatur lewat `HTTP_BIND`). Pasang Nginx di host sebagai terminator TLS dengan [nginx-host.conf.example](nginx-host.conf.example). Ganti `csirt.contoh.go.id` dengan domain Anda:
 
 ```bash
-sudo apt install nginx certbot python3-certbot-nginx
-sudo cp docs/nginx-host.conf.example /etc/nginx/sites-available/csirt
-sudo ln -s /etc/nginx/sites-available/csirt /etc/nginx/sites-enabled/
-sudo certbot --nginx -d csirt.contoh.go.id
+DOMAIN=csirt.contoh.go.id
+LE_EMAIL=admin@contoh.go.id
+sudo apt install -y nginx certbot
+sudo mkdir -p /var/www/letsencrypt
+
+# a. Konfigurasi sementara (HTTP saja) agar Let's Encrypt bisa memverifikasi domain
+printf 'server {\n    listen 80;\n    listen [::]:80;\n    server_name %s;\n    location /.well-known/acme-challenge/ { root /var/www/letsencrypt; }\n}\n' "$DOMAIN" \
+  | sudo tee /etc/nginx/sites-available/csirt >/dev/null
+sudo ln -sf /etc/nginx/sites-available/csirt /etc/nginx/sites-enabled/csirt
+sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t && sudo systemctl reload nginx
+
+# b. Dapatkan sertifikat (metode webroot, perpanjangan otomatis tanpa menghentikan Nginx)
+sudo certbot certonly --webroot -w /var/www/letsencrypt -d "$DOMAIN" --email "$LE_EMAIL" --agree-tos -n
+printf '#!/bin/sh\nsystemctl reload nginx\n' | sudo tee /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh >/dev/null
+sudo chmod 755 /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh
+
+# c. Pasang konfigurasi lengkap
+sudo cp docs/nginx-host.conf.example /etc/nginx/sites-available/csirt
+sudo sed -i "s/csirt.contoh.go.id/$DOMAIN/g" /etc/nginx/sites-available/csirt
+sudo nginx -t && sudo systemctl reload nginx
+sudo certbot renew --dry-run
 ```
 
-Karena request sekarang melewati proxy host, aktifkan `set_real_ip_from` di [docker/nginx/default.conf](../docker/nginx/default.conf) dengan subnet jaringan Docker (lihat `docker network inspect csirt_backend`). Tanpa langkah ini, whitelist login dan rate limit akan melihat IP gateway Docker, bukan IP klien. Setelah itu rebuild: `docker compose up -d --build web`.
+Karena request sekarang melewati proxy host, IP klien asli harus diteruskan ke container. Buka [docker/nginx/default.conf](../docker/nginx/default.conf), lalu aktifkan tiga baris `set_real_ip_from`, `real_ip_header`, dan `real_ip_recursive`. Subnet default `172.16.0.0/12` mencakup jaringan Docker standar (cek dengan `docker network inspect csirt_backend`). Setelah itu jalankan `docker compose up -d --build web`. **Tanpa langkah ini, whitelist login dan rate limit akan melihat IP gateway Docker, bukan IP klien.**
 
-### 5. Login pertama
+### 2.5 Login pertama
 
 1. Buka `https://csirt.contoh.go.id/csirt-login` dari IP yang ada di whitelist.
 2. Login dengan akun superadmin. Anda akan diarahkan ke **Keamanan Akun** untuk mengaktifkan 2FA (wajib).
@@ -130,7 +173,7 @@ Karena request sekarang melewati proxy host, aktifkan `set_real_ip_from` di [doc
 4. Lengkapi konten: **Kontak & Peta**, **Logo & Banner**, **Profil**, **Layanan**, **RFC 2350**, dan **Kunci PGP**.
 5. Periksa `https://csirt.contoh.go.id/.well-known/security.txt`.
 
-### 6. Operasional
+### 2.6 Operasional
 
 ```bash
 # Perintah artisan
@@ -150,95 +193,149 @@ docker run --rm -v csirt_public-uploads:/a -v csirt_private-storage:/b -v "$PWD"
 docker compose logs --since 1h app
 ```
 
-### Struktur volume
+Backup pada mode Docker **tidak terjadwal otomatis**. Masukkan kedua perintah backup di atas ke cron host.
 
 | Volume | Isi | Di-mount ke |
 |---|---|---|
 | `db-data` | Data MariaDB | `db` |
-| `public-uploads` | Logo, banner, artikel, PDF, kunci PGP | `app` (rw), `web` (ro) |
+| `public-uploads` | Logo, banner, gambar artikel, PDF, kunci PGP | `app` (rw), `web` (ro) |
 | `private-storage` | **Bukti aduan insiden** | Hanya `app`; tidak pernah dilayani Nginx |
 
 ---
 
-## B. Instalasi Manual (Ubuntu 24.04)
+## 3. Instalasi Manual (Ubuntu)
 
-### 1. Paket
+Bagian ini untuk administrator yang ingin memahami atau menyesuaikan setiap langkah. Script pada bagian 1 melakukan semua langkah ini, ditambah hardening yang lebih lengkap.
+
+### 3.1 Paket
 
 ```bash
 sudo apt update
-sudo apt install -y nginx mariadb-server unzip git \
-  php8.3-fpm php8.3-cli php8.3-mysql php8.3-gd php8.3-intl php8.3-mbstring \
-  php8.3-xml php8.3-zip php8.3-bcmath php8.3-curl php8.3-opcache
+sudo apt install -y software-properties-common ca-certificates curl gnupg git unzip
+# PHP 8.5 belum ada di repo resmi Ubuntu; gunakan PPA ondrej/php
+sudo add-apt-repository -y ppa:ondrej/php && sudo apt update
+sudo apt install -y nginx mariadb-server \
+  php8.5-fpm php8.5-cli php8.5-mysql php8.5-gd php8.5-intl php8.5-mbstring \
+  php8.5-xml php8.5-zip php8.5-bcmath php8.5-curl
+
 # Composer
 curl -sS https://getcomposer.org/installer | php && sudo mv composer.phar /usr/local/bin/composer
-# Node.js 22 (hanya untuk build aset; bisa dilakukan di mesin lain)
+
+# Node.js 22 (hanya untuk build aset)
+sudo install -d -m 0755 /etc/apt/keyrings
+curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg
+echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_22.x nodistro main" | sudo tee /etc/apt/sources.list.d/nodesource.list
+sudo apt update && sudo apt install -y nodejs
 ```
 
-### 2. Database
+### 3.2 Database
+
+```bash
+sudo mariadb
+```
 
 ```sql
 CREATE DATABASE csirt CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+-- Aplikasi terhubung lewat 127.0.0.1; daftarkan juga 'localhost' (socket).
+CREATE USER 'csirt_app'@'127.0.0.1' IDENTIFIED BY '<password-kuat>';
 CREATE USER 'csirt_app'@'localhost' IDENTIFIED BY '<password-kuat>';
+GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX, DROP, REFERENCES ON csirt.* TO 'csirt_app'@'127.0.0.1';
 GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX, DROP, REFERENCES ON csirt.* TO 'csirt_app'@'localhost';
+FLUSH PRIVILEGES;
 ```
 
-### 3. Aplikasi
+### 3.3 Aplikasi
 
 ```bash
-sudo mkdir -p /var/www/csirt && sudo chown $USER:www-data /var/www/csirt
-cd /var/www/csirt   # salin isi template-csirt-v2 ke sini
+sudo git clone https://github.com/VascoZ/masterweb-csirt-v2.git /var/www/csirt
+sudo chown -R $USER:www-data /var/www/csirt
+cd /var/www/csirt
 composer install --no-dev --optimize-autoloader
 npm ci && npm run build && rm -rf node_modules
-cp .env.example .env && chmod 640 .env
-php artisan key:generate
-# sunting .env: APP_URL, DB_*, MAIL_*, CSIRT_LOGIN_WHITELIST, dll.
-php artisan csirt:install            # interaktif: membuat superadmin & konten awal
-php artisan optimize
+cp .env.example .env
+php artisan key:generate --force
+nano .env    # isi APP_URL, DB_PASSWORD, MAIL_*, CSIRT_LOGIN_WHITELIST, dll.
+sudo chgrp www-data .env && chmod 640 .env   # hanya Anda & PHP yang bisa membaca
+
+# storage/ dan bootstrap/cache/ harus bisa ditulis PHP
 sudo chown -R www-data:www-data storage bootstrap/cache
-sudo find storage bootstrap/cache -type d -exec chmod 750 {} \;
+ln -sfn ../storage/app/public public/storage
+
+# Mulai sekarang jalankan artisan sebagai www-data
+sudo -u www-data php artisan csirt:install   # interaktif: migrasi, superadmin, konten awal
+sudo -u www-data php artisan optimize
 ```
 
-### 4. PHP-FPM
+### 3.4 PHP-FPM
 
-Salin pengaturan hardening dari [docker/php/security.ini](../docker/php/security.ini) ke `/etc/php/8.3/fpm/conf.d/99-csirt.ini`, lalu jalankan `sudo systemctl restart php8.3-fpm`.
+```bash
+sudo cp docker/php/security.ini /etc/php/8.5/fpm/conf.d/99-csirt.ini
+# Hapus baris error_log (khusus Docker); error PHP akan tercatat di error log Nginx.
+sudo sed -i '/^error_log/d' /etc/php/8.5/fpm/conf.d/99-csirt.ini
+sudo systemctl restart php8.5-fpm
+```
 
-### 5. Nginx
+Pengaturan `pm.max_requests = 200` (lihat [docker/php/www.conf](../docker/php/www.conf)) berada di file pool `/etc/php/8.5/fpm/pool.d/www.conf`, bukan di `conf.d`.
 
-Gunakan [nginx-host.conf.example](nginx-host.conf.example) dengan opsi "server langsung" (blok `location` PHP yang sudah disiapkan di file tersebut), lalu pasang TLS dengan certbot.
+### 3.5 Nginx dan TLS
 
-### 6. Update
+Gunakan [nginx-host.conf.example](nginx-host.conf.example) dengan **mode (2)**: hapus blok `location /` mode (1), lalu aktifkan (hapus `#`) blok mode (2) beserta dua baris `limit_req_zone` di bagian atas. Dapatkan sertifikat dan pasang konfigurasinya seperti langkah [2.4](#24-pasang-tls-dengan-nginx-di-host) (a–c).
+
+### 3.6 Update
 
 ```bash
 cd /var/www/csirt
-php artisan down
-git pull   # atau salin versi baru
-composer install --no-dev --optimize-autoloader
-npm ci && npm run build
-php artisan migrate --force
-php artisan optimize
-php artisan up
+sudo -u www-data php artisan down
+git pull
+# --no-scripts: bootstrap/cache milik www-data, jadi package:discover dijalankan sebagai www-data
+composer install --no-dev --optimize-autoloader --no-scripts
+sudo -u www-data php artisan package:discover
+npm ci && npm run build && rm -rf node_modules
+sudo -u www-data php artisan migrate --force
+sudo -u www-data php artisan optimize
+sudo systemctl reload php8.5-fpm   # OPcache memakai validate_timestamps=0
+sudo -u www-data php artisan up
 ```
 
 ---
 
 ## Konfigurasi Penting (`.env`)
 
-| Variabel | Default | Keterangan |
+| Variabel | Nilai di contoh | Keterangan |
 |---|---|---|
 | `CSIRT_LOGIN_WHITELIST` | `127.0.0.1,::1` | IP/CIDR yang boleh membuka `/csirt-login`. IP lain mendapat 404. |
-| `TRUSTED_PROXIES` | kosong | Isi bila Laravel berada di belakang proxy HTTP (bukan FastCGI). |
+| `TRUSTED_PROXIES` | kosong | Isi bila Laravel berada di belakang proxy HTTP. Tidak perlu untuk Nginx → PHP-FPM (FastCGI). |
 | `CSIRT_ENFORCE_2FA` | `true` | Wajibkan 2FA untuk semua akun dashboard. |
 | `CSIRT_TEAM_EMAIL` | kosong | Penerima notifikasi aduan baru. |
 | `CSIRT_TICKET_PREFIX` | `CSIRT` | Format nomor tiket `PREFIX-YYYYMMDD-XXXXXX`. |
 | `CSIRT_SECURITY_POLICY_URL` | kosong | URL kebijakan pengungkapan kerentanan (field `Policy` di security.txt). |
 | `SESSION_LIFETIME` | `30` | Menit tidak aktif sebelum sesi berakhir. |
 
+Setelah mengubah `.env`, jalankan `php artisan optimize` (atau `docker compose up -d` pada Docker) agar cache konfigurasi diperbarui.
+
 ## Pemecahan Masalah
 
 | Gejala | Penyebab & solusi |
 |---|---|
-| `/csirt-login` selalu 404 | IP Anda tidak ada di `CSIRT_LOGIN_WHITELIST`, atau IP yang terbaca adalah IP proxy (atur `set_real_ip_from`). Cek IP yang terbaca di Audit Log. |
-| Error 419 setelah login | Pada akses lewat HTTP biasa, `SESSION_SECURE_COOKIE=true` membuat cookie tidak terkirim. Gunakan HTTPS. |
+| `/csirt-login` selalu 404 | IP Anda tidak ada di `CSIRT_LOGIN_WHITELIST`, atau IP yang terbaca adalah IP proxy/gateway Docker (atur `set_real_ip_from`). Lihat IP yang terbaca di access log Nginx: `/var/log/nginx/csirt.access.log` (on-premise) atau `docker compose logs web` (Docker). |
+| Error 419 setelah login | Situs diakses lewat HTTP biasa, sedangkan `SESSION_SECURE_COOKIE=true` membuat cookie tidak terkirim. Gunakan HTTPS. |
 | Gambar captcha tidak muncul | Ekstensi `gd` belum terpasang. |
 | Tampilan berantakan | Aset belum di-build (`npm run build`), atau `APP_URL` salah. |
-| Kehilangan aplikasi autentikator | Gunakan kode pemulihan, atau minta superadmin mereset 2FA di menu Pengguna. |
+| Lupa password / kehilangan aplikasi autentikator | Gunakan kode pemulihan, minta superadmin lain mereset 2FA di menu **Pengguna**, atau pulihkan dari server: `php artisan csirt:reset-admin email@instansi.go.id` (lihat bawah). |
+
+### Memulihkan akses superadmin dari server
+
+`csirt:reset-admin` mengatur ulang password, mereset 2FA, dan menjadikan akun tersebut superadmin. Tindakan ini tercatat di audit log.
+
+```bash
+# Script on-premise
+cd /var/www/csirt && sudo -u www-data php artisan csirt:reset-admin admin@instansi.go.id
+
+# Docker
+docker compose exec app php artisan csirt:reset-admin admin@instansi.go.id
+
+# Sekaligus mengganti email akun
+... php artisan csirt:reset-admin admin@gmail.com --new-email=admin@instansi.go.id
+```
+
+Password baru ditanyakan secara interaktif. Bila email tidak ditemukan, daftar akun yang ada akan ditampilkan.

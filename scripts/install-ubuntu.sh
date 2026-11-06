@@ -2,7 +2,7 @@
 # =============================================================================
 #  Instalasi lengkap Situs CSIRT (on-premise) di Ubuntu Server 22.04 / 24.04 LTS
 #
-#  Memasang & mengonfigurasi: Nginx, PHP-FPM 8.3, MariaDB, Composer, Node.js
+#  Memasang & mengonfigurasi: Nginx, PHP-FPM 8.5, MariaDB, Composer, Node.js
 #  (hanya untuk build aset), aplikasi CSIRT, TLS, firewall (UFW), fail2ban,
 #  pembaruan keamanan otomatis, sinkronisasi waktu, dan backup harian.
 #
@@ -42,7 +42,9 @@
 set -Eeuo pipefail
 
 LOG_FILE=/var/log/csirt-install.log
-PHP_VERSION=8.3
+PHP_VERSION=8.5
+# Versi minimum yang memuat tambalan CVE-2026-109618 & CVE-2026-109619.
+PHP_MIN_PATCHED=8.5.12
 NODE_MAJOR=22
 APP_USER=csirt
 WEB_USER=www-data
@@ -153,17 +155,32 @@ apt-get -y -q -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-conf
 apt-get install -y -q ca-certificates curl gnupg git unzip rsync acl cron sudo \
     software-properties-common openssl ufw fail2ban unattended-upgrades chrony
 
-if [[ "$VERSION_ID" == 22.04 ]] && ! apt-cache policy "php${PHP_VERSION}-fpm" | grep -q 'Candidate:.*[0-9]'; then
+# PHP 8.5 tidak tersedia di repo resmi Ubuntu 22.04/24.04, jadi dipasang dari
+# PPA ondrej/php (dikelola Ondřej Surý, maintainer paket PHP Debian).
+if ! apt-cache policy "php${PHP_VERSION}-fpm" | grep -q 'Candidate:.*[0-9]'; then
     add-apt-repository -y ppa:ondrej/php
     apt-get update -q
 fi
 
-apt-get install -y -q nginx mariadb-server \
-    "php${PHP_VERSION}-fpm" "php${PHP_VERSION}-cli" "php${PHP_VERSION}-mysql" "php${PHP_VERSION}-gd" \
-    "php${PHP_VERSION}-intl" "php${PHP_VERSION}-mbstring" "php${PHP_VERSION}-xml" "php${PHP_VERSION}-zip" \
-    "php${PHP_VERSION}-bcmath" "php${PHP_VERSION}-curl" "php${PHP_VERSION}-opcache"
+php_pkgs=()
+for ext in fpm cli mysql gd intl mbstring xml zip bcmath curl opcache; do
+    # Sejak PHP 8.5 OPcache tertanam di inti PHP, sehingga paket terpisahnya bisa tidak ada.
+    if [[ $ext == opcache ]] && ! apt-cache show "php${PHP_VERSION}-opcache" >/dev/null 2>&1; then continue; fi
+    php_pkgs+=("php${PHP_VERSION}-$ext")
+done
+apt-get install -y -q nginx mariadb-server "${php_pkgs[@]}"
 [[ "$TLS_MODE" == letsencrypt ]] && apt-get install -y -q certbot
 ok "Nginx, MariaDB, PHP ${PHP_VERSION} terpasang"
+
+# Pastikan PHP sudah memuat tambalan CVE-2026-109618 & CVE-2026-109619 (RCE, CVSS 9.2).
+php_pkg=$(dpkg-query -W -f='${Version}' "php${PHP_VERSION}-fpm")
+php_upstream=$(php -r 'echo PHP_VERSION;')
+[[ "$(printf '%s\n' "$PHP_MIN_PATCHED" "$php_upstream" | sort -V | head -1)" == "$PHP_MIN_PATCHED" ]] && php_patched=1 || php_patched=0
+if [[ $php_patched == 1 ]]; then
+    ok "PHP $php_pkg sudah memuat tambalan CVE-2026-109618/109619"
+else
+    warn "PHP $php_pkg BELUM memuat tambalan CVE-2026-109618/109619 (RCE kritis). Jalankan 'apt-get update && apt-get upgrade' lalu ulangi."
+fi
 
 # Node.js hanya untuk build aset frontend (repo resmi NodeSource, kunci terverifikasi).
 if ! command -v node >/dev/null || [[ "$(node -v | sed -E 's/^v([0-9]+).*/\1/')" -lt $NODE_MAJOR ]]; then
@@ -322,9 +339,14 @@ max_file_uploads = 10
 max_execution_time = 60
 max_input_time = 60
 memory_limit = 256M
+; Batasi struktur input (mengurangi peluang OOM saat parsing, CVE-2026-109618)
+max_input_vars = 1000
+max_input_nesting_level = 32
 session.use_strict_mode = 1
 session.cookie_httponly = 1
 session.use_only_cookies = 1
+; Tidak dipakai aplikasi; jalur consumer pada CVE-2026-109619
+session.upload_progress.enabled = 0
 date.timezone = Asia/Jakarta
 opcache.enable = 1
 opcache.memory_consumption = 128
@@ -348,7 +370,8 @@ pm.max_children = 20
 pm.start_servers = 4
 pm.min_spare_servers = 2
 pm.max_spare_servers = 6
-pm.max_requests = 500
+; Daur ulang worker lebih sering agar state global yang tertinggal tidak bertahan lama.
+pm.max_requests = 200
 
 security.limit_extensions = .php
 ; PHP hanya boleh membaca direktori aplikasi & /tmp.
@@ -611,7 +634,19 @@ APT::Periodic::Update-Package-Lists "1";
 APT::Periodic::Unattended-Upgrade "1";
 APT::Periodic::AutocleanInterval "7";
 EOF
-ok "Pembaruan keamanan otomatis (unattended-upgrades) aktif"
+# Secara default unattended-upgrades hanya mengambil repo security Ubuntu.
+# PHP berasal dari PPA ondrej/php, jadi origin PPA itu diizinkan agar patch PHP ikut otomatis.
+if grep -rqs "ppa.launchpadcontent.net/ondrej/php\|ppa.launchpad.net/ondrej/php" /etc/apt/sources.list.d/; then
+    cat > /etc/apt/apt.conf.d/51csirt-unattended-upgrades <<'EOF'
+// Situs CSIRT: patch PHP dari PPA ondrej/php ikut dipasang otomatis.
+Unattended-Upgrade::Allowed-Origins {
+    "LP-PPA-ondrej-php:${distro_codename}";
+};
+EOF
+    ok "Pembaruan keamanan otomatis aktif (repo security Ubuntu + PPA ondrej/php untuk PHP)"
+else
+    ok "Pembaruan keamanan otomatis (unattended-upgrades) aktif"
+fi
 
 cat > /etc/fail2ban/jail.d/csirt.local <<'EOF'
 [DEFAULT]

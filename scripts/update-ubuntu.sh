@@ -13,7 +13,7 @@ set -Eeuo pipefail
 APP_DIR=${APP_DIR:-/var/www/csirt}
 APP_USER=csirt
 WEB_USER=www-data
-PHP_VERSION=8.3
+PHP_VERSION=8.5
 
 step() { echo; echo $'\e[1;34m'"==> $*"$'\e[0m'; }
 ok()   { echo $'\e[1;32m'"  ✓ $*"$'\e[0m'; }
@@ -21,6 +21,12 @@ die()  { echo $'\e[1;31m'"ERROR: $*"$'\e[0m' >&2; exit 1; }
 
 [[ $EUID -eq 0 ]] || die "Jalankan sebagai root: sudo bash $0"
 [[ -f "$APP_DIR/artisan" ]] || die "Aplikasi tidak ditemukan di $APP_DIR"
+# Periksa sumber kode sebelum backup & mode pemeliharaan.
+if [[ -n "${SOURCE_DIR:-}" ]]; then
+    [[ -f "$SOURCE_DIR/artisan" ]] || die "SOURCE_DIR tidak berisi aplikasi: $SOURCE_DIR"
+elif [[ ! -d "$APP_DIR/.git" ]]; then
+    die "$APP_DIR bukan repo git (diinstal dari folder lokal). Jalankan dengan: sudo SOURCE_DIR=/path/kode-baru bash $0"
+fi
 cd "$APP_DIR"
 
 artisan() { sudo -u "$WEB_USER" HOME=/tmp php artisan "$@"; }

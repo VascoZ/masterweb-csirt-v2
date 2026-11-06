@@ -6,7 +6,7 @@ set -e
 cd /var/www/html
 
 if [ -z "$APP_KEY" ]; then
-    echo "ERROR: APP_KEY belum diisi. Buat dengan: docker compose run --rm app php artisan key:generate --show" >&2
+    echo "ERROR: APP_KEY belum diisi di .env. Buat dengan: echo \"base64:\$(openssl rand -base64 32)\"" >&2
     exit 1
 fi
 

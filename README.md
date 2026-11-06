@@ -5,7 +5,7 @@ Versi ini adalah pembaruan menyeluruh dari *MasterWebCSIRT 2022* (Laravel 8).
 
 | Komponen | Versi |
 |---|---|
-| PHP | 8.3 |
+| PHP | 8.5 |
 | Laravel | 12.x |
 | Database | MySQL 8 / MariaDB 10.11+ (disarankan MariaDB 11.4 LTS) |
 | Frontend | Vite 7, Bootstrap 5.3, Bootstrap Icons — semua aset lokal, tanpa CDN, tanpa jQuery |
@@ -33,45 +33,61 @@ Versi ini adalah pembaruan menyeluruh dari *MasterWebCSIRT 2022* (Laravel 8).
 
 ## Instalasi On-Premise (Ubuntu 22.04 / 24.04)
 
-Satu perintah untuk memasang seluruh stack (Nginx, PHP-FPM 8.3, MariaDB, TLS, firewall, fail2ban, backup harian):
+Satu perintah untuk memasang seluruh stack (Nginx, PHP-FPM 8.5, MariaDB, TLS, firewall, fail2ban, backup harian) di server yang masih kosong:
 
 ```bash
+sudo apt install -y git
 git clone https://github.com/VascoZ/masterweb-csirt-v2.git /tmp/csirt
 sudo bash /tmp/csirt/scripts/install-ubuntu.sh
 ```
 
-Opsi lengkap dan mode non-interaktif: [docs/DEPLOY.md](docs/DEPLOY.md#script-instalasi-otomatis-ubuntu).
+Opsi lengkap dan mode non-interaktif: [docs/DEPLOY.md](docs/DEPLOY.md#1-script-instalasi-otomatis-ubuntu).
 
 ## Mulai Cepat (Docker)
 
 ```bash
+git clone https://github.com/VascoZ/masterweb-csirt-v2.git csirt && cd csirt
 cp .env.docker.example .env
-# Isi APP_KEY, APP_URL, DB_PASSWORD, DB_ROOT_PASSWORD, ADMIN_EMAIL, ADMIN_PASSWORD
-docker compose run --rm --no-deps app php artisan key:generate --show   # salin ke APP_KEY
+echo "APP_KEY=base64:$(openssl rand -base64 32)"   # salin ke APP_KEY di .env
+openssl rand -hex 24                               # untuk DB_PASSWORD dan DB_ROOT_PASSWORD
+# Isi juga APP_URL, ADMIN_EMAIL, ADMIN_PASSWORD di .env
 docker compose up -d --build
 ```
 
-Situs berjalan di `http://127.0.0.1:8080`. Login dashboard: `/csirt-login` (hanya dari IP pada `CSIRT_LOGIN_WHITELIST`).
-
-Panduan lengkap: **[docs/DEPLOY.md](docs/DEPLOY.md)**.
+Situs berjalan di `http://127.0.0.1:8080` dan halaman login ada di `/csirt-login`. Untuk **uji coba lokal tanpa HTTPS**, set `SESSION_SECURE_COOKIE=false` dan tambahkan `172.16.0.0/12` ke `CSIRT_LOGIN_WHITELIST` (alasannya dijelaskan di [DEPLOY.md](docs/DEPLOY.md#23-jalankan)). Untuk produksi, pasang TLS sesuai [DEPLOY.md bagian 2.4](docs/DEPLOY.md#24-pasang-tls-dengan-nginx-di-host).
 
 ## Dokumentasi
 
 | Dokumen | Isi |
 |---|---|
-| [docs/DEPLOY.md](docs/DEPLOY.md) | Deploy dengan Docker dan instalasi manual (Ubuntu + Nginx + PHP-FPM) |
-| [docs/HARDENING.md](docs/HARDENING.md) | Checklist hardening server, TLS, firewall, backup |
+| [docs/DEPLOY.md](docs/DEPLOY.md) | Script instalasi otomatis, Docker Compose, instalasi manual, pemulihan akses admin |
+| [docs/HARDENING.md](docs/HARDENING.md) | Checklist hardening server, TLS, firewall, backup, catatan CVE PHP |
 | [docs/MIGRASI-2022.md](docs/MIGRASI-2022.md) | Migrasi data dari MasterWebCSIRT 2022 |
 | [docs/nginx-host.conf.example](docs/nginx-host.conf.example) | Contoh Nginx host dengan TLS |
 
-## Pengembangan
+## Perintah Artisan Khusus
+
+| Perintah | Fungsi |
+|---|---|
+| `php artisan csirt:install` | Instalasi awal: migrasi, superadmin pertama, konten awal, dan cek konfigurasi. Aman dijalankan ulang. |
+| `php artisan csirt:reset-admin <email>` | Memulihkan akses: password baru, reset 2FA, jadikan superadmin |
+
+## Pengembangan (lokal)
+
+Butuh PHP 8.5 (ekstensi `gd`, `intl`, `pdo_sqlite`, `zip`), Composer, dan Node.js 22.
 
 ```bash
 composer install
 npm install && npm run build
-cp .env.example .env && php artisan key:generate
-php artisan migrate --seed      # data contoh (hanya untuk lokal)
-php artisan test
+cp .env.example .env
+php artisan key:generate
+# Ubah .env untuk lokal: APP_ENV=local, APP_DEBUG=true, APP_URL=http://127.0.0.1:8000,
+# DB_CONNECTION=sqlite, SESSION_SECURE_COOKIE=false, lalu HAPUS baris DB_DATABASE
+# (agar memakai database/database.sqlite)
+touch database/database.sqlite
+php artisan migrate --seed      # data contoh; akun demo ditampilkan di terminal
+php artisan serve
+php artisan test                # 98 test, memakai SQLite in-memory
 ```
 
 ## Lisensi

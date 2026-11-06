@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 #
 # Image produksi situs CSIRT.
-#   target "app" : PHP-FPM 8.3 berisi aplikasi
+#   target "app" : PHP-FPM 8.5 berisi aplikasi
 #   target "web" : Nginx yang menyajikan aset statis dan meneruskan PHP ke "app"
 #
 # Build: docker compose build   (lihat docker-compose.yml)
@@ -24,12 +24,15 @@ COPY . .
 RUN composer dump-autoload --no-dev --optimize --classmap-authoritative --no-scripts
 
 # ---------- 3. Runtime PHP-FPM ----------
-FROM php:8.3-fpm-alpine AS app
+FROM php:8.5-fpm-alpine AS app
 
+# Sejak PHP 8.5 OPcache sudah tertanam di inti PHP; hanya dipasang bila belum ada.
 RUN apk add --no-cache icu-libs libzip libpng libjpeg-turbo freetype libwebp fcgi \
  && apk add --no-cache --virtual .build-deps $PHPIZE_DEPS icu-dev libzip-dev libpng-dev libjpeg-turbo-dev freetype-dev libwebp-dev linux-headers \
  && docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp \
- && docker-php-ext-install -j"$(nproc)" pdo_mysql gd zip intl bcmath opcache exif pcntl \
+ && exts="pdo_mysql gd zip intl bcmath exif pcntl" \
+ && (php -m | grep -qi '^Zend OPcache$' || exts="$exts opcache") \
+ && docker-php-ext-install -j"$(nproc)" $exts \
  && apk del .build-deps \
  && mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
 
