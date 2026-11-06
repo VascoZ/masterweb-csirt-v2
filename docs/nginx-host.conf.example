@@ -1,0 +1,100 @@
+# /etc/nginx/sites-available/csirt
+#
+# Nginx di HOST sebagai terminator TLS. Dua mode:
+#   (1) Reverse proxy ke container Docker "web" (127.0.0.1:8080)  <- default
+#   (2) Server langsung ke PHP-FPM (instalasi manual)            <- lihat blok yang dikomentari
+#
+# Sertifikat: sudo certbot --nginx -d csirt.contoh.go.id
+
+# Batas laju untuk mode (2); pada mode (1) batas laju sudah ada di container.
+# limit_req_zone $binary_remote_addr zone=csirt_login:10m rate=10r/m;
+# limit_req_zone $binary_remote_addr zone=csirt_report:10m rate=6r/m;
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name csirt.contoh.go.id;
+
+    # Izinkan validasi ACME (Let's Encrypt), lainnya dialihkan ke HTTPS.
+    location /.well-known/acme-challenge/ { root /var/www/letsencrypt; }
+    location / { return 301 https://$host$request_uri; }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+    server_name csirt.contoh.go.id;
+
+    server_tokens off;
+    client_max_body_size 30m;
+
+    # --- TLS (profil "intermediate" Mozilla) ---
+    ssl_certificate     /etc/letsencrypt/live/csirt.contoh.go.id/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/csirt.contoh.go.id/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305;
+    ssl_prefer_server_ciphers off;
+    ssl_session_timeout 1d;
+    ssl_session_cache shared:CSIRT_SSL:10m;
+    ssl_session_tickets off;
+    ssl_stapling on;
+    ssl_stapling_verify on;
+    resolver 1.1.1.1 8.8.8.8 valid=300s;
+
+    # HSTS. Tambahkan "; preload" hanya bila seluruh subdomain sudah HTTPS.
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+
+    access_log /var/log/nginx/csirt.access.log;
+    error_log  /var/log/nginx/csirt.error.log warn;
+
+    # ================= MODE (1): reverse proxy ke Docker =================
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_read_timeout 60s;
+    }
+
+    # ================= MODE (2): langsung ke PHP-FPM =====================
+    # Hapus blok MODE (1) di atas, lalu aktifkan blok berikut.
+    #
+    # root /var/www/csirt/public;
+    # index index.php;
+    # charset utf-8;
+    #
+    # add_header X-Content-Type-Options "nosniff" always;
+    # add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    #
+    # location ~ /\.(?!well-known/) { deny all; return 404; }
+    #
+    # location /build/ {
+    #     add_header Cache-Control "public, max-age=31536000, immutable" always;
+    #     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    #     try_files $uri =404;
+    # }
+    #
+    # location ^~ /storage/ {
+    #     add_header X-Content-Type-Options "nosniff" always;
+    #     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    #     location ~* \.(png|jpe?g|gif|webp|ico|pdf)$ { try_files $uri =404; }
+    #     location ~* \.asc$ { default_type text/plain; try_files $uri =404; }
+    #     return 404;
+    # }
+    #
+    # location = /login { limit_req zone=csirt_login burst=5 nodelay; try_files $uri /index.php?$query_string; }
+    # location = /aduan { limit_req zone=csirt_report burst=3 nodelay; try_files $uri /index.php?$query_string; }
+    # location / { try_files $uri $uri/ /index.php?$query_string; }
+    #
+    # location = /index.php {
+    #     fastcgi_pass unix:/run/php/php8.3-fpm.sock;
+    #     fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
+    #     include fastcgi_params;
+    #     fastcgi_hide_header X-Powered-By;
+    # }
+    #
+    # location ~ \.php$ { return 404; }
+}

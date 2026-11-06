@@ -1,0 +1,212 @@
+// =====================================================================
+//  Design system bersama situs publik & dashboard.
+//  Ubah warna identitas instansi di bagian "Warna" saja.
+// =====================================================================
+
+@import '@fontsource-variable/plus-jakarta-sans/wght.css';
+
+// ---------- Warna ----------
+$navy-950: #070f1f;
+$navy-900: #0b1a33;
+$navy-800: #12264a;
+$navy-700: #1b3566;
+
+$primary: #1f5eff;
+$info: #0ea5e9;
+$success: #16a34a;
+$warning: #f59e0b;
+$danger: #e11d48;
+$dark: $navy-900;
+
+$gray-50: #f8fafc;
+$gray-100: #f1f5f9;
+$gray-200: #e2e8f0;
+$gray-300: #cbd5e1;
+$gray-400: #94a3b8;
+$gray-500: #64748b;
+$gray-600: #475569;
+$gray-700: #334155;
+$gray-800: #1e293b;
+$gray-900: #0f172a;
+
+// ---------- Tipografi ----------
+$font-family-sans-serif: 'Plus Jakarta Sans Variable', 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+$font-family-monospace: ui-monospace, 'SFMono-Regular', 'Cascadia Code', Consolas, monospace;
+$font-size-base: 1rem;
+$line-height-base: 1.65;
+$body-color: $gray-700;
+$body-bg: #fff;
+$headings-color: $gray-900;
+$headings-font-weight: 700;
+$headings-line-height: 1.25;
+$display-font-weight: 800;
+$lead-font-weight: 400;
+$letter-spacing-tight: -.02em;
+
+// ---------- Bentuk ----------
+$border-color: $gray-200;
+$border-radius: .625rem;
+$border-radius-sm: .5rem;
+$border-radius-lg: .875rem;
+$border-radius-xl: 1.25rem;
+$box-shadow-sm: 0 1px 2px rgba(15, 23, 42, .06);
+$box-shadow: 0 4px 16px -4px rgba(15, 23, 42, .10), 0 2px 4px -2px rgba(15, 23, 42, .06);
+$box-shadow-lg: 0 20px 40px -12px rgba(15, 23, 42, .18);
+$enable-shadows: false;
+$link-decoration: none;
+$link-hover-decoration: none;
+$link-color: $primary;
+
+// ---------- Komponen ----------
+$btn-padding-y: .55rem;
+$btn-padding-x: 1.1rem;
+$btn-font-weight: 600;
+$btn-border-radius: $border-radius;
+$btn-border-radius-sm: $border-radius-sm;
+$btn-border-radius-lg: $border-radius-lg;
+$input-padding-y: .6rem;
+$input-padding-x: .85rem;
+$input-border-color: $gray-300;
+$input-focus-border-color: $primary;
+$input-focus-box-shadow: 0 0 0 .25rem rgba($primary, .15);
+$input-placeholder-color: $gray-400;
+$form-label-font-weight: 600;
+$form-label-color: $gray-800;
+$form-text-color: $gray-500;
+$card-border-color: $gray-200;
+$card-border-radius: $border-radius-lg;
+$card-cap-bg: #fff;
+$card-cap-padding-y: .9rem;
+$card-spacer-y: 1.25rem;
+$card-spacer-x: 1.25rem;
+$table-cell-padding-y: .8rem;
+$table-cell-padding-x: 1rem;
+$table-th-font-weight: 600;
+$table-border-color: $gray-200;
+$badge-font-weight: 600;
+$badge-padding-y: .38em;
+$badge-padding-x: .7em;
+$badge-border-radius: 999px;
+$alert-border-radius: $border-radius-lg;
+$dropdown-border-color: $gray-200;
+$dropdown-box-shadow: $box-shadow-lg;
+$dropdown-link-active-bg: $primary;
+$list-group-border-color: $gray-200;
+$pagination-border-radius: $border-radius-sm;
+
+@import 'bootstrap/scss/bootstrap';
+@import 'bootstrap-icons/font/bootstrap-icons.css';
+
+// =====================================================================
+//  Dasar
+// =====================================================================
+body {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+}
+
+h1, h2, h3, .display-4, .display-5, .display-6 { letter-spacing: $letter-spacing-tight; }
+
+::selection { background: rgba($primary, .18); }
+
+a { transition: color .15s ease; }
+
+.text-balance { text-wrap: balance; }
+.min-w-0 { min-width: 0; }
+.pre-line { white-space: pre-line; }
+.eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    font-size: .78rem;
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: $primary;
+}
+
+// ---------- Tombol ----------
+.btn { letter-spacing: -.005em; transition: all .15s ease; }
+.btn i { line-height: 1; }
+.btn-primary, .btn-danger { box-shadow: 0 1px 2px rgba(15, 23, 42, .12); }
+.btn-primary:hover, .btn-danger:hover { transform: translateY(-1px); box-shadow: 0 6px 14px -4px rgba($primary, .45); }
+.btn-danger:hover { box-shadow: 0 6px 14px -4px rgba($danger, .45); }
+.btn-icon { display: inline-flex; align-items: center; justify-content: center; width: 2.1rem; height: 2.1rem; padding: 0; }
+
+// ---------- Form ----------
+.form-control, .form-select { box-shadow: $box-shadow-sm; }
+.form-check-input { cursor: pointer; }
+.form-label { margin-bottom: .4rem; font-size: .9rem; }
+
+// ---------- Kartu ----------
+.card { box-shadow: $box-shadow-sm; }
+.card-header { font-weight: 700; color: $gray-900; }
+.card-hover { transition: transform .2s ease, box-shadow .2s ease; }
+.card-hover:hover { transform: translateY(-3px); box-shadow: $box-shadow-lg; }
+
+// ---------- Badge lembut (dipakai enum status/severity) ----------
+@each $name, $color in ('primary': $primary, 'info': $info, 'success': $success, 'warning': $warning, 'danger': $danger, 'secondary': $gray-500) {
+    .badge-soft-#{$name} {
+        color: shift-color($color, 35%);
+        background-color: tint-color($color, 88%);
+        border: 1px solid tint-color($color, 70%);
+    }
+}
+
+// ---------- Label TLP 2.0 (spesifikasi FIRST: latar hitam) ----------
+.tlp {
+    display: inline-flex;
+    align-items: center;
+    padding: .2rem .6rem;
+    border-radius: .35rem;
+    background: #000;
+    font-family: $font-family-monospace;
+    font-weight: 700;
+    font-size: .75rem;
+    letter-spacing: .03em;
+    line-height: 1.4;
+    &.tlp-clear { color: #fff; }
+    &.tlp-green { color: #33ff00; }
+    &.tlp-amber { color: #ffc000; }
+    &.tlp-red { color: #ff2b2b; }
+}
+
+// ---------- Konten editor ----------
+.rich-content {
+    overflow-wrap: anywhere;
+    font-size: 1.05rem;
+    line-height: 1.8;
+    color: $gray-700;
+    > * + * { margin-top: 1rem; }
+    h1, h2, h3 { margin-top: 2rem; }
+    img { max-width: 100%; height: auto; border-radius: $border-radius; }
+    a { text-decoration: underline; text-underline-offset: 3px; }
+    ul, ol { padding-left: 1.4rem; }
+    li + li { margin-top: .35rem; }
+    pre { background: $gray-900; color: $gray-100; padding: 1rem 1.25rem; border-radius: $border-radius; font-size: .875rem; }
+    blockquote { border-left: 4px solid $primary; background: $gray-50; padding: .75rem 1.25rem; border-radius: 0 $border-radius $border-radius 0; color: $gray-700; }
+}
+
+// ---------- Lain-lain ----------
+.captcha-box img { border-radius: $border-radius-sm; border: 1px solid $gray-300; background: #fff; }
+.recovery-codes { font-family: $font-family-monospace; columns: 2; font-size: .95rem; }
+.qr-code svg { width: 200px; height: 200px; display: block; }
+.icon-tile {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: $border-radius;
+    font-size: 1.25rem;
+    flex-shrink: 0;
+}
+.empty-state {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: $gray-500;
+    i { font-size: 2.5rem; color: $gray-300; display: block; margin-bottom: .75rem; }
+}
+.pagination { gap: .25rem; margin-bottom: 0; }
+.page-link { border-radius: $border-radius-sm !important; }
