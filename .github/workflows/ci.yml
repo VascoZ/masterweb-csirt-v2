@@ -30,7 +30,7 @@ jobs:
           php-version: '8.5'
           extensions: gd, intl, pdo_sqlite, zip, bcmath, mbstring
           coverage: none
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
           cache: npm
@@ -48,7 +48,7 @@ jobs:
         with:
           php-version: '8.5'
           extensions: gd, intl, pdo_sqlite, zip, bcmath, mbstring
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
       - name: composer audit
