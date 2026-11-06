@@ -24,7 +24,7 @@ jobs:
     name: Test (PHP 8.5)
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.5'
@@ -43,7 +43,7 @@ jobs:
     name: Audit dependensi
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.5'
@@ -60,7 +60,7 @@ jobs:
     name: SAST & secret scanning
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Semgrep
@@ -78,14 +78,14 @@ jobs:
     name: Lint script
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: shellcheck -S warning scripts/*.sh docker/entrypoint.sh
 
   image-scan:
     name: Pindai image Docker
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Build image
         run: docker build --target app -t csirt-app:ci .
       - name: Trivy
