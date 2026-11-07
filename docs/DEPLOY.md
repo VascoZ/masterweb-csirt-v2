@@ -45,9 +45,15 @@ git clone https://github.com/VascoZ/masterweb-csirt-v2.git /tmp/csirt
 sudo bash /tmp/csirt/scripts/install-ubuntu.sh
 ```
 
-Script hanya menanyakan **nama tim, email superadmin, dan password superadmin** (12-72 karakter, huruf besar dan kecil, angka, simbol). Alamat situs diambil otomatis dari IP server. Kode aplikasi diambil dari GitHub ke `/var/www/csirt`. Folder `/tmp/csirt` hanya dipakai untuk menjalankan script dan boleh dihapus sesudahnya.
+Script **tidak menanyakan apa pun**. Alamat situs diambil otomatis dari IP server, dan akun superadmin dibuat otomatis:
 
-Setelah selesai, buka `http://<IP-server>` dan login di `/csirt-login`.
+- Email: `admin@csirt.local`
+- Password: **acak dan kuat**, ditampilkan di akhir instalasi dan disimpan di `/root/csirt-install-info.txt` (hanya root). Password bawaan yang sama untuk semua instalasi sengaja tidak dipakai karena kode ini publik.
+- Saat login pertama, aktifkan 2FA lalu ganti email dan password lewat Dashboard → Keamanan Akun.
+
+Untuk memakai email dan password sendiri, lihat mode non-interaktif di bawah. Kode aplikasi diambil dari GitHub ke `/var/www/csirt`. Folder `/tmp/csirt` hanya dipakai untuk menjalankan script dan boleh dihapus sesudahnya.
+
+Setelah selesai, buka `http://<IP-server>` dan login di `/csirt-login`. Untuk melihat ulang kredensial: `sudo grep Superadmin /root/csirt-install-info.txt`.
 
 ### 1.2 Mode non-interaktif
 
@@ -71,6 +77,7 @@ sudo DOMAIN=csirt.contoh.go.id SITE_NAME="Contoh-CSIRT" \
 
 | Variabel | Keterangan |
 |---|---|
+| `ADMIN_EMAIL`, `ADMIN_PASSWORD` | Akun superadmin. Default: `admin@csirt.local` dan password acak. Password sendiri harus 12-72 karakter, huruf besar dan kecil, angka, simbol. |
 | `DOMAIN` | Alamat situs. **Default: IP server** (terdeteksi otomatis). Isi dengan nama domain bila DNS sudah siap. |
 | `TLS_MODE` | `none` (**default**, HTTP), `selfsigned` (uji/internal), `letsencrypt` (DNS publik dan port 80 harus terbuka), atau `custom` (isi `CERT_FILE` dan `KEY_FILE`) |
 | `TRUSTED_HOSTS` | Host tambahan yang diterima aplikasi (selain `DOMAIN`). Pada mode IP, default-nya semua IPv4 server ini. Host lain mendapat 400. |
@@ -131,7 +138,7 @@ Alamat NAT (`10.0.2.15`) tidak bisa dijangkau dari komputer host. Tambahkan **Po
 |---|---|
 | `Gagal mengunduh kunci repositori PHP` | Server tidak bisa mencapai `keyserver.ubuntu.com`. Periksa internet dan DNS: `ping -c2 google.com`. |
 | Berhenti lama di `apt`/`composer`/`npm` | Jaringan atau proxy. Pada proxy, set `https_proxy` dan `Acquire::https::Proxy` untuk apt. |
-| Berhenti di pertanyaan password | Password tidak memenuhi syarat. Beri lewat `ADMIN_PASSWORD='...'` (kutip tunggal). |
+| Password sendiri ditolak | Tidak memenuhi syarat (12-72 karakter, huruf besar dan kecil, angka, simbol). Beri lewat `ADMIN_PASSWORD='...'` (kutip tunggal). |
 | Port 80 tidak listen setelah selesai | `sudo nginx -t && sudo systemctl restart nginx`, lalu `sudo ss -tlnp \| grep :80`. |
 | Situs 400 Bad Request | Alamat yang dibuka tidak ada di `APP_URL`/`CSIRT_TRUSTED_HOSTS` pada `/var/www/csirt/.env`. Setelah mengubahnya: `sudo -u www-data php /var/www/csirt/artisan optimize:clear`. |
 

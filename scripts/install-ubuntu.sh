@@ -7,23 +7,24 @@
 #  pembaruan keamanan otomatis, sinkronisasi waktu, dan backup harian.
 #
 #  Pemakaian (sebagai root) - MODE SEDERHANA (default):
-#     sudo bash scripts/install-ubuntu.sh
-#     Aplikasi dapat dibuka lewat ALAMAT IP server (http://<IP-server>), tanpa DNS,
+#     sudo bash scripts/install-ubuntu.sh        (tanpa pertanyaan, tanpa variabel)
+#     Superadmin default: admin@csirt.local dengan password ACAK yang ditampilkan di akhir
+#     instalasi dan disimpan di /root/csirt-install-info.txt. Aplikasi dapat dibuka lewat ALAMAT IP server (http://<IP-server>), tanpa DNS,
 #     tanpa SSL/TLS, dan firewall (UFW) TIDAK diaktifkan. DNS, HTTPS, dan firewall
 #     dipasang sendiri setelah instalasi selesai (lihat docs/DEPLOY.md bagian 1.4).
 #
-#  Tanpa pertanyaan (non-interaktif):
+#  Dengan akun sendiri:
 #     sudo ADMIN_EMAIL=admin@contoh.go.id ADMIN_PASSWORD='KataSandi#Kuat2026' \
 #          NONINTERACTIVE=1 bash scripts/install-ubuntu.sh
 #
-#  Variabel (semuanya opsional kecuali kredensial superadmin):
+#  Variabel (semuanya opsional):
 #     DOMAIN            Alamat situs. Default: IP server (terdeteksi otomatis). Boleh diisi
 #                       nama domain bila DNS sudah siap.
 #     SITE_NAME         Nama tim, mis. "Contoh-CSIRT"     (default: Contoh-CSIRT)
 #     ADMIN_NAME        Nama superadmin                   (default: Administrator)
 #     ADMIN_USERNAME    Username superadmin               (default: admin)
-#     ADMIN_EMAIL       Email superadmin (ditanyakan bila kosong)
-#     ADMIN_PASSWORD    Password superadmin, 12-72 karakter, huruf besar/kecil, angka, simbol
+#     ADMIN_EMAIL       Email superadmin (default: admin@csirt.local)
+#     ADMIN_PASSWORD    Password superadmin (default: ACAK, ditampilkan di akhir instalasi)
 #     TLS_MODE          none (default) | selfsigned | letsencrypt | custom
 #     LE_EMAIL          Email untuk Let's Encrypt         (TLS_MODE=letsencrypt)
 #     CERT_FILE         Path fullchain sertifikat         (TLS_MODE=custom)
@@ -139,6 +140,7 @@ fix_broken_ipv6() {
 # ----------------------------------------------------------------------------- 0. prasyarat
 [[ $EUID -eq 0 ]] || die "Jalankan sebagai root: sudo bash $0"
 mkdir -p "$(dirname "$LOG_FILE")"
+touch "$LOG_FILE"; chmod 600 "$LOG_FILE"
 exec > >(tee -a "$LOG_FILE") 2>&1
 echo "===== Instalasi CSIRT dimulai $(date -Is) ====="
 
@@ -157,7 +159,7 @@ printf 'Acquire::Retries "3";\nAcquire::http::Timeout "30";\nAcquire::https::Tim
 
 DOMAIN=${DOMAIN:-$(detect_ip)}
 [[ -n "$DOMAIN" ]] || ask DOMAIN "Alamat IP atau domain server"
-ask SITE_NAME "Nama tim CSIRT" "Contoh-CSIRT"
+SITE_NAME=${SITE_NAME:-Contoh-CSIRT}
 ADMIN_NAME=${ADMIN_NAME:-Administrator}
 ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
 TLS_MODE=${TLS_MODE:-none}
@@ -457,9 +459,16 @@ if mariadb -N -e "SELECT COUNT(*) FROM \`$DB_NAME\`.users WHERE is_superadmin=1"
     ok "Superadmin sudah ada (dilewati)"
     artisan csirt:install --no-interaction --skip-migrate --site-name="$SITE_NAME" >/dev/null || true
 else
-    ask ADMIN_EMAIL "Email superadmin"
+    # Default: email admin@csirt.local dan password ACAK yang kuat (ditampilkan di akhir instalasi
+    # dan disimpan di $INFO_FILE). Password bawaan yang sama untuk semua instalasi tidak dipakai
+    # karena kodenya publik. Isi ADMIN_EMAIL / ADMIN_PASSWORD bila ingin nilai sendiri.
+    ADMIN_EMAIL=${ADMIN_EMAIL:-admin@csirt.local}
+    if [[ -z "${ADMIN_PASSWORD:-}" ]]; then
+        # Awalan tetap menjamin huruf besar/kecil, angka, dan simbol; sisanya acak (>= 100 bit).
+        ADMIN_PASSWORD="Csirt#9a$(openssl rand -base64 24 | tr -dc 'A-Za-z0-9' | head -c 20)"
+        GENERATED_ADMIN_PASSWORD=$ADMIN_PASSWORD
+    fi
     while true; do
-        ask ADMIN_PASSWORD "Password superadmin (12-72 karakter, huruf besar & kecil, angka, simbol)" "" secret
         # Harus sama dengan Password::defaults() di aplikasi (AppServiceProvider).
         if [[ ${#ADMIN_PASSWORD} -ge 12 && ${#ADMIN_PASSWORD} -le 72 && "$ADMIN_PASSWORD" =~ [A-Z] && "$ADMIN_PASSWORD" =~ [a-z] && "$ADMIN_PASSWORD" =~ [0-9] && "$ADMIN_PASSWORD" =~ [^A-Za-z0-9] ]]; then break; fi
         [[ "${NONINTERACTIVE:-0}" == 1 ]] && die "ADMIN_PASSWORD tidak memenuhi kebijakan password."
@@ -471,6 +480,7 @@ else
         HOME=/tmp php artisan csirt:install --no-interaction --skip-migrate)
     unset ADMIN_PASSWORD
     ok "Superadmin $ADMIN_EMAIL dibuat"
+    CREATED_ADMIN_EMAIL=$ADMIN_EMAIL
 fi
 artisan optimize >/dev/null
 ok "Cache konfigurasi, route, dan view dibuat"
@@ -786,6 +796,12 @@ Backup           : /var/backups/csirt  (harian 02:15, simpan $BACKUP_KEEP_DAYS h
 Log instalasi    : $LOG_FILE
 Update aplikasi  : sudo bash $APP_DIR/scripts/update-ubuntu.sh
 EOF
+if [[ -n "${GENERATED_ADMIN_PASSWORD:-}" ]]; then
+    cat >> "$INFO_FILE" <<EOF
+Superadmin       : ${CREATED_ADMIN_EMAIL:-} / ${GENERATED_ADMIN_PASSWORD}
+                   (password acak bawaan installer; 2FA wajib diaktifkan saat login pertama)
+EOF
+fi
 
 echo
 echo "${c_green}=====================================================================${c_reset}"
@@ -793,6 +809,16 @@ echo "${c_green} Instalasi selesai.${c_reset}"
 echo "   Situs        : $APP_URL"
 echo "   Login        : $APP_URL/csirt-login"
 echo "   Info & kredensial DB tersimpan di $INFO_FILE (hanya root)"
+if [[ -n "${GENERATED_ADMIN_PASSWORD:-}" ]]; then
+    # Hanya ke terminal (/dev/tty), tidak ke log instalasi.
+    {
+        echo
+        echo "${c_yellow}   AKUN SUPERADMIN (catat sekarang, juga ada di $INFO_FILE):${c_reset}"
+        echo "     Email    : ${CREATED_ADMIN_EMAIL:-}"
+        echo "     Password : ${GENERATED_ADMIN_PASSWORD}"
+        echo "     Aktifkan 2FA saat login pertama, lalu ganti password lewat Dashboard -> Keamanan Akun."
+    } > /dev/tty 2>/dev/null || echo "   Kredensial superadmin: lihat $INFO_FILE (sudo cat)"
+fi
 echo
 echo " Langkah berikutnya:"
 echo "   1. Login sebagai superadmin dari IP yang ada di whitelist, lalu aktifkan 2FA."
