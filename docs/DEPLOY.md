@@ -10,8 +10,7 @@ Ada tiga cara memasang situs CSIRT. Pilih salah satu:
 
 **Persiapan untuk semua cara:**
 
-- Domain/subdomain, misalnya `csirt.contoh.go.id`, yang mengarah ke IP server.
-- Sertifikat TLS: Let's Encrypt (butuh port 80 terbuka dari internet) atau sertifikat instansi.
+- Untuk **produksi**: domain/subdomain, misalnya `csirt.contoh.go.id`, yang mengarah ke IP server, serta sertifikat TLS (Let's Encrypt atau sertifikat instansi). Untuk uji coba lewat script Ubuntu, cukup alamat IP server.
 - (Opsional) Akun SMTP, hanya bila ingin mengaktifkan notifikasi email aduan. Secara default aduan dikelola sepenuhnya melalui dashboard (lihat [Notifikasi Email](#notifikasi-email-opsional)).
 - Daftar IP/subnet kantor atau VPN yang boleh membuka halaman login dan SSH.
 
@@ -23,13 +22,22 @@ Ada tiga cara memasang situs CSIRT. Pilih salah satu:
 
 - Nginx, PHP-FPM 8.5 (pool khusus dengan `open_basedir`), MariaDB (hanya `127.0.0.1`), Composer, dan Node.js (hanya untuk build aset)
 - Aplikasi di `/var/www/csirt`. Kode milik user `csirt` dan read-only bagi PHP; hanya `storage/` dan `bootstrap/cache/` yang bisa ditulis.
-- TLS: Let's Encrypt, sertifikat instansi, atau self-signed
-- UFW, fail2ban (SSH dan rate limit Nginx), unattended-upgrades, chrony
+- fail2ban (SSH dan rate limit Nginx), unattended-upgrades, chrony
 - Backup harian pukul 02:15 ke `/var/backups/csirt`, serta cron scheduler Laravel
 
-> **Tentang PHP 8.5:** repo resmi Ubuntu 22.04/24.04 belum menyediakan PHP 8.5, jadi script memasangnya dari PPA [`ondrej/php`](https://launchpad.net/~ondrej/+archive/ubuntu/php) (dikelola Ondřej Surý, maintainer paket PHP Debian). Patch keamanan PHP datang dari PPA ini, bukan dari Canonical. Script mendaftarkan PPA tersebut ke unattended-upgrades agar patch PHP ikut terpasang otomatis, dan memperingatkan bila versi PHP terpasang di bawah 8.5.12 (belum memuat tambalan CVE-2026-109618/109619). Pastikan penggunaan PPA ini sesuai kebijakan instansi Anda.
+**Mode sederhana (default).** Script sengaja dibuat minimal supaya cepat selesai dan mudah diuji:
 
-### Mode interaktif
+- Situs dibuka lewat **alamat IP server** (`http://<IP-server>`). Tidak perlu DNS.
+- **Tanpa HTTPS** (HTTP biasa). Sertifikat dipasang belakangan.
+- **Firewall (UFW) tidak diaktifkan.** Aktifkan sendiri setelah instalasi.
+
+Cocok untuk uji coba, VM lokal, atau pemasangan awal. Sebelum dipakai publik, selesaikan [bagian 1.4](#14-setelah-instalasi-dns-https-dan-firewall).
+
+> **Tentang PHP 8.5:** repo resmi Ubuntu 22.04/24.04 belum menyediakan PHP 8.5, jadi script memasangnya dari PPA [`ondrej/php`](https://launchpad.net/~ondrej/+archive/ubuntu/php) (dikelola Ondřej Surý, maintainer paket PHP Debian). Repo ditambahkan langsung (tanpa `add-apt-repository`, yang memanggil API Launchpad dan sering timeout), dan fingerprint kunci diverifikasi sebelum dipakai. Patch keamanan PHP datang dari PPA ini, bukan dari Canonical. Script mendaftarkan PPA tersebut ke unattended-upgrades agar patch PHP ikut terpasang otomatis, dan memperingatkan bila versi PHP terpasang di bawah 8.5.12 (belum memuat tambalan CVE-2026-109618/109619). Pastikan penggunaan PPA ini sesuai kebijakan instansi Anda.
+
+> **Jaringan dengan IPv6 rusak:** bila VM punya alamat IPv6 tetapi rutenya tidak berfungsi, `apt`/`curl` akan timeout. Script mendeteksi ini dan mematikan IPv6 sementara (sampai reboot) selama instalasi.
+
+### 1.1 Mode interaktif
 
 ```bash
 sudo apt install -y git
@@ -37,34 +45,95 @@ git clone https://github.com/VascoZ/masterweb-csirt-v2.git /tmp/csirt
 sudo bash /tmp/csirt/scripts/install-ubuntu.sh
 ```
 
-Script akan menanyakan domain, nama tim, mode TLS, email Let's Encrypt, whitelist login, serta email dan password superadmin. Kode aplikasi diambil ulang dari GitHub ke `/var/www/csirt`. Folder `/tmp/csirt` hanya dipakai untuk menjalankan script dan boleh dihapus sesudahnya.
+Script hanya menanyakan **nama tim, email superadmin, dan password superadmin** (12-72 karakter, huruf besar dan kecil, angka, simbol). Alamat situs diambil otomatis dari IP server. Kode aplikasi diambil dari GitHub ke `/var/www/csirt`. Folder `/tmp/csirt` hanya dipakai untuk menjalankan script dan boleh dihapus sesudahnya.
 
-### Mode non-interaktif
+Setelah selesai, buka `http://<IP-server>` dan login di `/csirt-login`.
+
+### 1.2 Mode non-interaktif
+
+```bash
+sudo ADMIN_EMAIL=admin@contoh.go.id ADMIN_PASSWORD='Ganti!Password123' \
+     NONINTERACTIVE=1 bash /tmp/csirt/scripts/install-ubuntu.sh
+```
+
+Contoh lengkap untuk produksi (domain, HTTPS, firewall, email):
 
 ```bash
 sudo DOMAIN=csirt.contoh.go.id SITE_NAME="Contoh-CSIRT" \
      TLS_MODE=letsencrypt LE_EMAIL=admin@contoh.go.id \
      ADMIN_EMAIL=admin@contoh.go.id ADMIN_PASSWORD='Ganti!Password123' \
-     LOGIN_WHITELIST="10.10.0.0/16" SSH_ALLOW="10.10.0.0/16" \
+     LOGIN_WHITELIST="10.10.0.0/16" ENABLE_FIREWALL=1 SSH_ALLOW="10.10.0.0/16" \
      MAIL_HOST=smtp.contoh.go.id MAIL_USERNAME=noreply@contoh.go.id MAIL_PASSWORD='...' \
      NONINTERACTIVE=1 bash /tmp/csirt/scripts/install-ubuntu.sh
 ```
 
+### 1.3 Variabel
+
 | Variabel | Keterangan |
 |---|---|
-| `TLS_MODE` | `letsencrypt` (DNS publik dan port 80 harus terbuka), `custom` (isi `CERT_FILE` dan `KEY_FILE` dengan path sertifikat instansi), `selfsigned` (uji/internal), atau `none` (HTTP saja, bukan untuk produksi) |
+| `DOMAIN` | Alamat situs. **Default: IP server** (terdeteksi otomatis). Isi dengan nama domain bila DNS sudah siap. |
+| `TLS_MODE` | `none` (**default**, HTTP), `selfsigned` (uji/internal), `letsencrypt` (DNS publik dan port 80 harus terbuka), atau `custom` (isi `CERT_FILE` dan `KEY_FILE`) |
+| `TRUSTED_HOSTS` | Host tambahan yang diterima aplikasi (selain `DOMAIN`). Pada mode IP, default-nya semua IPv4 server ini. Host lain mendapat 400. |
 | `LOGIN_WHITELIST` | IP/CIDR yang boleh membuka `/csirt-login`. Default: jaringan privat (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`). |
-| `SSH_ALLOW` | IP/CIDR yang boleh SSH. **Wajib diisi untuk produksi**; bila kosong, SSH terbuka untuk semua IP. |
+| `ENABLE_FIREWALL=1` | Aktifkan UFW (default: **tidak** diaktifkan). Isi juga `SSH_ALLOW`. |
+| `SSH_ALLOW` | IP/CIDR yang boleh SSH saat firewall diaktifkan. **Wajib diisi untuk produksi**; bila kosong, SSH terbuka untuk semua IP. |
 | `SOURCE_DIR` | Untuk server tanpa akses ke GitHub: salin folder kode ke server, lalu arahkan ke folder itu |
-| `SKIP_FIREWALL=1` | Lewati UFW bila firewall dikelola perangkat jaringan |
 | `MAIL_*`, `TEAM_EMAIL` | Opsional. Bila `MAIL_HOST` diisi, notifikasi email aduan diaktifkan (`CSIRT_MAIL_NOTIFICATIONS=true`). Bila kosong, aduan dikelola lewat dashboard saja. |
 
 Daftar lengkap variabel ada di bagian atas script.
 
-- Script **aman dijalankan ulang**: database, `APP_KEY`, dan superadmin yang sudah ada tidak ditimpa.
+- Script **aman dijalankan ulang**: database, `APP_KEY`, dan superadmin yang sudah ada tidak ditimpa. Jalankan ulang dengan variabel baru untuk mengganti domain, HTTPS, atau firewall.
 - Kredensial admin tidak pernah ditulis ke `.env`.
 - Setelah selesai, ringkasan instalasi (termasuk password database) disimpan di `/root/csirt-install-info.txt`, yang hanya bisa dibaca root.
 - Log lengkap instalasi: `/var/log/csirt-install.log`.
+
+### 1.4 Setelah instalasi: DNS, HTTPS, dan firewall
+
+Ketiganya dipasang belakangan. Cara termudah adalah **menjalankan ulang script** dengan variabel yang sesuai (data tidak hilang):
+
+**a. Domain (DNS) dan HTTPS**
+
+1. Buat record DNS `A` untuk domain yang mengarah ke IP server (atau, untuk uji coba, tambahkan `IP-server nama-domain` ke file hosts komputer Anda).
+2. Jalankan ulang:
+   ```bash
+   sudo DOMAIN=csirt.contoh.go.id TLS_MODE=letsencrypt LE_EMAIL=admin@contoh.go.id \
+        NONINTERACTIVE=1 bash /tmp/csirt/scripts/install-ubuntu.sh
+   ```
+   Gunakan `TLS_MODE=custom CERT_FILE=... KEY_FILE=...` untuk sertifikat instansi, atau `TLS_MODE=selfsigned` untuk uji coba. Script menulis ulang konfigurasi Nginx dan `APP_URL`.
+3. Pastikan `https://<domain>/up` menjawab 200. Alamat IP lama tetap diterima aplikasi sebagai host tepercaya; hapus dari `CSIRT_TRUSTED_HOSTS` di `/var/www/csirt/.env` bila tidak diperlukan.
+
+**b. Firewall (UFW)**
+
+```bash
+sudo ENABLE_FIREWALL=1 SSH_ALLOW="10.10.0.0/16" NONINTERACTIVE=1 \
+     bash /tmp/csirt/scripts/install-ubuntu.sh
+```
+
+Atau manual (pastikan SSH diizinkan lebih dulu agar tidak terkunci):
+
+```bash
+sudo ufw default deny incoming
+sudo ufw default allow outgoing
+sudo ufw allow from 10.10.0.0/16 to any port 22 proto tcp
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+sudo ufw enable
+sudo ufw status verbose
+```
+
+**c. Akses dari VirtualBox (mode NAT)**
+
+Alamat NAT (`10.0.2.15`) tidak bisa dijangkau dari komputer host. Tambahkan **Port Forwarding** (Settings → Network → Advanced): Host `127.0.0.1:8081` ke Guest port `80`, lalu buka `http://127.0.0.1:8081`. Alternatifnya, pakai **Bridged Adapter** atau **Host-only Adapter** dan buka `http://<IP-VM>`.
+
+**Bila instalasi gagal / timeout**
+
+| Gejala | Penyebab dan solusi |
+|---|---|
+| `Gagal mengunduh kunci repositori PHP` | Server tidak bisa mencapai `keyserver.ubuntu.com`. Periksa internet dan DNS: `ping -c2 google.com`. |
+| Berhenti lama di `apt`/`composer`/`npm` | Jaringan atau proxy. Pada proxy, set `https_proxy` dan `Acquire::https::Proxy` untuk apt. |
+| Berhenti di pertanyaan password | Password tidak memenuhi syarat. Beri lewat `ADMIN_PASSWORD='...'` (kutip tunggal). |
+| Port 80 tidak listen setelah selesai | `sudo nginx -t && sudo systemctl restart nginx`, lalu `sudo ss -tlnp \| grep :80`. |
+| Situs 400 Bad Request | Alamat yang dibuka tidak ada di `APP_URL`/`CSIRT_TRUSTED_HOSTS` pada `/var/www/csirt/.env`. Setelah mengubahnya: `sudo -u www-data php /var/www/csirt/artisan optimize:clear`. |
 
 ### Update
 
@@ -213,7 +282,7 @@ Bagian ini untuk administrator yang ingin memahami atau menyesuaikan setiap lang
 sudo apt update
 sudo apt install -y software-properties-common ca-certificates curl gnupg git unzip
 # PHP 8.5 belum ada di repo resmi Ubuntu; gunakan PPA ondrej/php
-sudo add-apt-repository -y ppa:ondrej/php && sudo apt update
+sudo add-apt-repository -y ppa:ondrej/php && sudo apt update   # bila timeout, lihat bagian 1 (repo ditambah langsung)
 sudo apt install -y nginx mariadb-server \
   php8.5-fpm php8.5-cli php8.5-mysql php8.5-gd php8.5-intl php8.5-mbstring \
   php8.5-xml php8.5-zip php8.5-bcmath php8.5-curl

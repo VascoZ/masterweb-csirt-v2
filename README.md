@@ -34,7 +34,7 @@ Versi ini adalah pembaruan menyeluruh dari *MasterWebCSIRT 2022* (Laravel 8).
 
 ## Instalasi On-Premise (Ubuntu 22.04 / 24.04)
 
-Satu perintah untuk memasang seluruh stack (Nginx, PHP-FPM 8.5, MariaDB, TLS, firewall, fail2ban, backup harian) di server yang masih kosong:
+Satu perintah untuk memasang seluruh stack (Nginx, PHP-FPM 8.5, MariaDB, fail2ban, backup harian) di server yang masih kosong. Mode default **sederhana**: situs dibuka lewat alamat IP server, tanpa DNS, tanpa HTTPS, dan firewall tidak diaktifkan. DNS, HTTPS, dan firewall dipasang belakangan:
 
 ```bash
 sudo apt install -y git
@@ -42,7 +42,7 @@ git clone https://github.com/VascoZ/masterweb-csirt-v2.git /tmp/csirt
 sudo bash /tmp/csirt/scripts/install-ubuntu.sh
 ```
 
-Opsi lengkap dan mode non-interaktif: [docs/DEPLOY.md](docs/DEPLOY.md#1-script-instalasi-otomatis-ubuntu).
+Selesai instalasi, buka `http://<IP-server>`. Opsi lengkap, mode non-interaktif, dan cara memasang DNS/HTTPS/firewall sesudahnya: [docs/DEPLOY.md](docs/DEPLOY.md#1-script-instalasi-otomatis-ubuntu).
 
 ## Mulai Cepat (Docker)
 

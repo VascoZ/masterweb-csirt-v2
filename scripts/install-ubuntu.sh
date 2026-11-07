@@ -6,38 +6,43 @@
 #  (hanya untuk build aset), aplikasi CSIRT, TLS, firewall (UFW), fail2ban,
 #  pembaruan keamanan otomatis, sinkronisasi waktu, dan backup harian.
 #
-#  Pemakaian (sebagai root):
-#     sudo bash scripts/install-ubuntu.sh                 # interaktif
-#     sudo DOMAIN=csirt.contoh.go.id ADMIN_EMAIL=... ADMIN_PASSWORD=... \
-#          TLS_MODE=letsencrypt LE_EMAIL=... NONINTERACTIVE=1 bash scripts/install-ubuntu.sh
+#  Pemakaian (sebagai root) - MODE SEDERHANA (default):
+#     sudo bash scripts/install-ubuntu.sh
+#     Aplikasi dapat dibuka lewat ALAMAT IP server (http://<IP-server>), tanpa DNS,
+#     tanpa SSL/TLS, dan firewall (UFW) TIDAK diaktifkan. DNS, HTTPS, dan firewall
+#     dipasang sendiri setelah instalasi selesai (lihat docs/DEPLOY.md bagian 1.4).
 #
-#  Variabel (opsional, akan ditanyakan bila kosong & mode interaktif):
-#     DOMAIN            Nama domain situs, mis. csirt.contoh.go.id
-#     SITE_NAME         Nama tim, mis. "Contoh-CSIRT"
+#  Tanpa pertanyaan (non-interaktif):
+#     sudo ADMIN_EMAIL=admin@contoh.go.id ADMIN_PASSWORD='KataSandi#Kuat2026' \
+#          NONINTERACTIVE=1 bash scripts/install-ubuntu.sh
+#
+#  Variabel (semuanya opsional kecuali kredensial superadmin):
+#     DOMAIN            Alamat situs. Default: IP server (terdeteksi otomatis). Boleh diisi
+#                       nama domain bila DNS sudah siap.
+#     SITE_NAME         Nama tim, mis. "Contoh-CSIRT"     (default: Contoh-CSIRT)
 #     ADMIN_NAME        Nama superadmin                   (default: Administrator)
 #     ADMIN_USERNAME    Username superadmin               (default: admin)
-#     ADMIN_EMAIL       Email superadmin
-#     ADMIN_PASSWORD    Password superadmin (min. 8, huruf besar/kecil, angka, simbol)
-#     TLS_MODE          letsencrypt | custom | selfsigned | none   (default: letsencrypt)
+#     ADMIN_EMAIL       Email superadmin (ditanyakan bila kosong)
+#     ADMIN_PASSWORD    Password superadmin, 12-72 karakter, huruf besar/kecil, angka, simbol
+#     TLS_MODE          none (default) | selfsigned | letsencrypt | custom
 #     LE_EMAIL          Email untuk Let's Encrypt         (TLS_MODE=letsencrypt)
 #     CERT_FILE         Path fullchain sertifikat         (TLS_MODE=custom)
 #     KEY_FILE          Path private key                  (TLS_MODE=custom)
 #     LOGIN_WHITELIST   IP/CIDR yang boleh membuka halaman login
 #                       (default: jaringan privat 10/8, 172.16/12, 192.168/16)
-#     TRUSTED_HOSTS     Host tambahan yang diterima selain DOMAIN (mis. alamat IP server), pisahkan koma.
-#                       Host lain mendapat 400 Bad Request.
-#     SSH_ALLOW         IP/CIDR yang boleh SSH (default: semua, TIDAK disarankan)
+#     TRUSTED_HOSTS     Host tambahan yang diterima selain DOMAIN, pisahkan koma.
+#                       Default pada mode IP: semua alamat IPv4 server ini.
+#     ENABLE_FIREWALL=1 Aktifkan UFW (default: TIDAK diaktifkan)
+#     SSH_ALLOW         IP/CIDR yang boleh SSH bila ENABLE_FIREWALL=1 (default: semua)
 #     REPO_URL          Sumber kode git  (default: https://github.com/VascoZ/masterweb-csirt-v2.git)
 #     REPO_BRANCH       Branch git       (default: main)
 #     SOURCE_DIR        Pakai folder lokal sebagai sumber kode (server tanpa internet ke GitHub)
 #     APP_DIR           Lokasi aplikasi  (default: /var/www/csirt)
 #     MAIL_HOST, MAIL_PORT, MAIL_USERNAME, MAIL_PASSWORD, MAIL_FROM_ADDRESS, MAIL_ENCRYPTION
 #                       Opsional. Bila MAIL_HOST diisi, notifikasi email aduan diaktifkan.
-#                       Bila kosong (default), aduan dikelola lewat dashboard saja.
 #     TEAM_EMAIL        Email tim penerima notifikasi aduan (butuh MAIL_HOST)
 #     TICKET_PREFIX     Prefix nomor tiket (default: CSIRT)
 #     BACKUP_KEEP_DAYS  Lama penyimpanan backup harian (default: 14)
-#     SKIP_FIREWALL=1   Lewati konfigurasi UFW (mis. bila firewall dikelola perangkat lain)
 #     NONINTERACTIVE=1  Jangan bertanya; gagal bila ada variabel wajib yang kosong
 #
 #  Aman dijalankan ulang: database, APP_KEY, dan superadmin yang sudah ada tidak ditimpa.
@@ -112,6 +117,25 @@ set_env() {
 }
 get_env() { grep -E "^$1=" "$ENV_FILE" 2>/dev/null | tail -1 | cut -d= -f2- | sed -E "s/^['\"](.*)['\"]$/\1/"; }
 
+# Alamat IPv4 utama server (dipakai sebagai alamat situs pada mode sederhana).
+detect_ip() {
+    local addr
+    addr=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src"){print $(i+1); exit}}')
+    [[ -n "$addr" ]] || addr=$(hostname -I 2>/dev/null | awk '{print $1}')
+    echo "$addr"
+}
+
+# Beberapa jaringan memberi alamat IPv6 tetapi rutenya tidak berfungsi, sehingga apt/curl/composer
+# menggantung (timeout). Bila IPv4 normal tetapi IPv6 gagal, IPv6 dimatikan sementara
+# (hanya sampai reboot) selama instalasi.
+fix_broken_ipv6() {
+    if curl -4 -fsS --max-time 8 -o /dev/null https://deb.nodesource.com 2>/dev/null \
+       && ! curl -6 -fsS --max-time 8 -o /dev/null https://deb.nodesource.com 2>/dev/null; then
+        sysctl -qw net.ipv6.conf.all.disable_ipv6=1 net.ipv6.conf.default.disable_ipv6=1 || true
+        warn "IPv6 tidak berfungsi di jaringan ini; dimatikan sementara (sampai reboot) agar unduhan tidak timeout."
+    fi
+}
+
 # ----------------------------------------------------------------------------- 0. prasyarat
 [[ $EUID -eq 0 ]] || die "Jalankan sebagai root: sudo bash $0"
 mkdir -p "$(dirname "$LOG_FILE")"
@@ -127,11 +151,16 @@ esac
 export DEBIAN_FRONTEND=noninteractive
 
 step "Konfigurasi instalasi"
-ask DOMAIN "Domain situs (mis. csirt.contoh.go.id)"
+command -v curl >/dev/null || { apt-get update -q && apt-get install -y -q curl ca-certificates; }
+fix_broken_ipv6
+printf 'Acquire::Retries "3";\nAcquire::http::Timeout "30";\nAcquire::https::Timeout "30";\n' > /etc/apt/apt.conf.d/99csirt-network
+
+DOMAIN=${DOMAIN:-$(detect_ip)}
+[[ -n "$DOMAIN" ]] || ask DOMAIN "Alamat IP atau domain server"
 ask SITE_NAME "Nama tim CSIRT" "Contoh-CSIRT"
 ADMIN_NAME=${ADMIN_NAME:-Administrator}
 ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
-ask TLS_MODE "Mode TLS (letsencrypt/custom/selfsigned/none)" "letsencrypt"
+TLS_MODE=${TLS_MODE:-none}
 case "$TLS_MODE" in
     letsencrypt) ask LE_EMAIL "Email untuk Let's Encrypt" ;;
     custom) ask CERT_FILE "Path sertifikat (fullchain .crt/.pem)"; ask KEY_FILE "Path private key (.key)"
@@ -139,7 +168,15 @@ case "$TLS_MODE" in
     selfsigned|none) ;;
     *) die "TLS_MODE tidak dikenal: $TLS_MODE" ;;
 esac
-ask LOGIN_WHITELIST "IP/CIDR yang boleh membuka halaman login" "127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+LOGIN_WHITELIST=${LOGIN_WHITELIST:-127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
+# Mode IP: situs dibuka lewat alamat IP. Semua IPv4 server ini diterima sebagai host tepercaya.
+IP_MODE=0
+if [[ "$DOMAIN" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    IP_MODE=1
+    if [[ -z "${TRUSTED_HOSTS:-}" ]]; then
+        TRUSTED_HOSTS=$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | paste -sd, - || true)
+    fi
+fi
 APP_DIR=${APP_DIR:-/var/www/csirt}
 REPO_URL=${REPO_URL:-https://github.com/VascoZ/masterweb-csirt-v2.git}
 REPO_BRANCH=${REPO_BRANCH:-main}
@@ -150,19 +187,31 @@ SCHEME=https; [[ "$TLS_MODE" == none ]] && SCHEME=http
 APP_URL="$SCHEME://$DOMAIN"
 
 [[ "$DOMAIN" =~ ^[A-Za-z0-9.-]+$ ]] || die "DOMAIN tidak valid: $DOMAIN"
-ok "Domain $DOMAIN, TLS $TLS_MODE, direktori $APP_DIR"
+ok "Alamat situs $APP_URL (TLS: $TLS_MODE, direktori: $APP_DIR)"
 
 # ----------------------------------------------------------------------------- 1. paket sistem
 step "Memasang paket sistem"
 apt-get update -q
 apt-get -y -q -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold upgrade
 apt-get install -y -q ca-certificates curl gnupg git unzip rsync acl cron sudo \
-    software-properties-common openssl ufw fail2ban unattended-upgrades chrony
+    openssl fail2ban unattended-upgrades chrony
 
 # PHP 8.5 tidak tersedia di repo resmi Ubuntu 22.04/24.04, jadi dipasang dari
 # PPA ondrej/php (dikelola Ondřej Surý, maintainer paket PHP Debian).
+# Repositori ditambahkan langsung (tanpa add-apt-repository, yang memanggil API Launchpad dan
+# sering timeout). Kunci diunduh lalu fingerprint-nya diverifikasi sebelum dipakai.
+ONDREJ_FPR=B8DC7E53946656EFBCE4C1DD71DAEAAB4AD4CAB6
 if ! apt-cache policy "php${PHP_VERSION}-fpm" | grep -q 'Candidate:.*[0-9]'; then
-    add-apt-repository -y ppa:ondrej/php
+    install -d -m 0755 /etc/apt/keyrings
+    key_tmp=$(mktemp)
+    curl -fsSL --retry 3 "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x${ONDREJ_FPR}" -o "$key_tmp" \
+        || die "Gagal mengunduh kunci repositori PHP (keyserver.ubuntu.com). Periksa koneksi internet/DNS."
+    gpg --show-keys --with-colons "$key_tmp" | awk -F: '/^fpr/{print $10}' | grep -qx "$ONDREJ_FPR" \
+        || die "Fingerprint kunci repositori PHP tidak cocok; instalasi dibatalkan."
+    gpg --dearmor --yes -o /etc/apt/keyrings/ondrej-php.gpg "$key_tmp"
+    rm -f "$key_tmp"
+    echo "deb [signed-by=/etc/apt/keyrings/ondrej-php.gpg] https://ppa.launchpadcontent.net/ondrej/php/ubuntu ${VERSION_CODENAME} main" \
+        > /etc/apt/sources.list.d/ondrej-php.list
     apt-get update -q
 fi
 
@@ -289,6 +338,8 @@ set_env DB_PASSWORD "$DB_PASSWORD"
 set_env SESSION_SECURE_COOKIE "$([[ $SCHEME == https ]] && echo true || echo false)"
 set_env CSIRT_LOGIN_WHITELIST "$LOGIN_WHITELIST"
 [[ -n "${TRUSTED_HOSTS:-}" ]] && set_env CSIRT_TRUSTED_HOSTS "$TRUSTED_HOSTS"
+# Mode IP: jangan alihkan 127.0.0.1 ke IP server (mis. akses lewat port forwarding VirtualBox).
+if [[ "$IP_MODE" == 1 ]]; then set_env CSIRT_CANONICAL_REDIRECT false; else set_env CSIRT_CANONICAL_REDIRECT true; fi
 set_env CSIRT_TICKET_PREFIX "$TICKET_PREFIX"
 [[ -n "${TEAM_EMAIL:-}" ]] && set_env CSIRT_TEAM_EMAIL "$TEAM_EMAIL"
 if [[ -n "${MAIL_HOST:-}" ]]; then
@@ -433,6 +484,9 @@ limit_req_zone $binary_remote_addr zone=csirt_login:10m rate=10r/m;
 limit_req_zone $binary_remote_addr zone=csirt_report:10m rate=6r/m;
 limit_req_zone $binary_remote_addr zone=csirt_general:10m rate=10r/s;
 limit_req_status 429;
+EOF
+if [[ "$IP_MODE" != 1 ]]; then
+    cat >> /etc/nginx/conf.d/csirt-http.conf <<'EOF'
 
 # Tolak request HTTP dengan header Host selain domain situs (mencegah Host header
 # poisoning). Pada HTTPS, aplikasi sendiri menolak Host di luar APP_URL (status 400).
@@ -443,6 +497,7 @@ server {
     return 444;
 }
 EOF
+fi
 install -d -m 0755 /var/www/letsencrypt
 rm -f /etc/nginx/sites-enabled/default
 
@@ -569,7 +624,11 @@ EOF
 }
 
 write_http_app() {
-    { echo "server {"; echo "    listen 80;"; echo "    listen [::]:80;"; echo "    server_name $DOMAIN;"; app_locations; echo "}"; } > /etc/nginx/sites-available/csirt
+    local ds="" sn="$DOMAIN"
+    # Mode IP: server default, jadi situs terbuka lewat IP mana pun (juga 127.0.0.1 via port forwarding).
+    # Host yang diterima tetap dibatasi aplikasi (CSIRT_TRUSTED_HOSTS).
+    if [[ "$IP_MODE" == 1 ]]; then ds=" default_server"; sn="_"; fi
+    { echo "server {"; echo "    listen 80$ds;"; echo "    listen [::]:80$ds;"; echo "    server_name $sn;"; app_locations; echo "}"; } > /etc/nginx/sites-available/csirt
 }
 
 HSTS_LINE=""
@@ -610,7 +669,7 @@ case "$TLS_MODE" in
         ;;
     none)
         write_http_app
-        warn "TLS_MODE=none: situs berjalan tanpa HTTPS. Jangan gunakan untuk produksi."
+        warn "Situs berjalan tanpa HTTPS (HTTP biasa). Pasang HTTPS sebelum dipakai di produksi (docs/DEPLOY.md)."
         ;;
 esac
 ln -sfn /etc/nginx/sites-available/csirt /etc/nginx/sites-enabled/csirt
@@ -685,9 +744,10 @@ systemctl enable fail2ban >/dev/null 2>&1 || true
 systemctl restart fail2ban || warn "fail2ban gagal dijalankan; periksa: journalctl -u fail2ban"
 ok "fail2ban aktif untuk SSH & rate limit Nginx"
 
-if [[ "${SKIP_FIREWALL:-0}" == 1 ]]; then
-    warn "Konfigurasi firewall dilewati (SKIP_FIREWALL=1)."
+if [[ "${ENABLE_FIREWALL:-0}" != 1 ]]; then
+    warn "Firewall (UFW) TIDAK diaktifkan. Untuk mengaktifkan: sudo ENABLE_FIREWALL=1 SSH_ALLOW=<ip/cidr> bash $0"
 else
+    command -v ufw >/dev/null || apt-get install -y -q ufw
     SSH_PORT=$( (sshd -T 2>/dev/null || true) | awk '/^port /{print $2; exit}'); SSH_PORT=${SSH_PORT:-22}
     ufw --force reset >/dev/null
     ufw default deny incoming >/dev/null
