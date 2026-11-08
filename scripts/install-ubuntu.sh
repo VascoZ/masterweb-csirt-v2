@@ -260,7 +260,7 @@ if ! command -v composer >/dev/null; then
     php "$tmp/composer-setup.php" --quiet --install-dir=/usr/local/bin --filename=composer
     rm -rf "$tmp"
 fi
-ok "Composer $(composer --version 2>/dev/null | awk '{print $3}')"
+ok "Composer $(COMPOSER_ALLOW_SUPERUSER=1 composer --version --no-interaction </dev/null 2>/dev/null | awk '{print $3}')"
 
 systemctl enable --now chrony >/dev/null 2>&1 || true
 ok "Sinkronisasi waktu (chrony) aktif — penting untuk kode 2FA"
