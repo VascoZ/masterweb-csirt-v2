@@ -250,8 +250,11 @@ ok "Node.js $(node -v)"
 # Composer dengan verifikasi checksum installer resmi.
 if ! command -v composer >/dev/null; then
     tmp=$(mktemp -d)
-    expected=$(curl -fsSL https://composer.github.io/installer.sig)
-    curl -fsSL https://getcomposer.org/installer -o "$tmp/composer-setup.php"
+    # Timeout + retry agar tidak menggantung bila host tidak terjangkau; coba IPv4 lalu IPv6.
+    fetch() { curl -4 -fsSL --connect-timeout 10 --max-time 60 --retry 3 "$@" || curl -fsSL --connect-timeout 10 --max-time 60 --retry 2 "$@"; }
+    echo "  Mengunduh installer Composer..."
+    expected=$(fetch https://composer.github.io/installer.sig) || die "Gagal mengunduh checksum Composer (cek akses ke composer.github.io)."
+    fetch https://getcomposer.org/installer -o "$tmp/composer-setup.php" || die "Gagal mengunduh installer Composer (cek akses ke getcomposer.org)."
     actual=$(php -r "echo hash_file('sha384', '$tmp/composer-setup.php');")
     [[ "$expected" == "$actual" ]] || die "Checksum installer Composer tidak cocok."
     php "$tmp/composer-setup.php" --quiet --install-dir=/usr/local/bin --filename=composer
