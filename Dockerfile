@@ -63,7 +63,7 @@ ENTRYPOINT ["csirt-entrypoint"]
 CMD ["php-fpm"]
 
 # ---------- 4. Nginx ----------
-FROM nginxinc/nginx-unprivileged:1.28-alpine AS web
+FROM nginxinc/nginx-unprivileged:1.31-alpine AS web
 
 COPY docker/nginx/default.conf /etc/nginx/conf.d/default.conf
 COPY docker/nginx/security-headers.conf /etc/nginx/snippets/security-headers.conf
