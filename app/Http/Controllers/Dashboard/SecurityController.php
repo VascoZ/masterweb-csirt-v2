@@ -32,7 +32,7 @@ class SecurityController extends Controller
     public function updatePassword(Request $request): RedirectResponse
     {
         $data = $request->validate([
-            'current_password' => ['required', 'current_password'],
+            'current_password' => ['bail', 'required', 'string', 'current_password'],
             'password' => ['required', 'confirmed', 'different:current_password', Password::defaults()],
         ]);
 
@@ -85,7 +85,7 @@ class SecurityController extends Controller
 
     public function regenerateRecoveryCodes(Request $request, TwoFactor $twoFactor): RedirectResponse
     {
-        $request->validate(['current_password' => ['required', 'current_password']]);
+        $request->validate(['current_password' => ['bail', 'required', 'string', 'current_password']]);
 
         $codes = $twoFactor->generateRecoveryCodes();
         $request->user()->forceFill(['two_factor_recovery_codes' => $codes])->save();
@@ -98,7 +98,7 @@ class SecurityController extends Controller
 
     public function disableTwoFactor(Request $request): RedirectResponse
     {
-        $request->validate(['current_password' => ['required', 'current_password']]);
+        $request->validate(['current_password' => ['bail', 'required', 'string', 'current_password']]);
 
         if (config('csirt.enforce_2fa')) {
             return back()->with('error', '2FA diwajibkan oleh kebijakan sistem dan tidak dapat dinonaktifkan.');

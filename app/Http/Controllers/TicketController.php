@@ -38,8 +38,10 @@ class TicketController extends Controller
             $ticket->save();
 
             foreach ($request->file('attachments', []) as $file) {
+                $originalName = preg_replace('/[\x00-\x1F\x7F]/u', '', basename($file->getClientOriginalName()));
+
                 $ticket->attachments()->create([
-                    'original_name' => mb_substr(basename($file->getClientOriginalName()), 0, 255),
+                    'original_name' => mb_substr($originalName ?: 'lampiran', 0, 255),
                     // Disimpan di disk privat dengan nama acak; hanya admin yang bisa mengunduh.
                     'path' => $file->store('tickets/' . $ticket->id, 'local'),
                     'mime_type' => $file->getMimeType(),

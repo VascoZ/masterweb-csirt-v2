@@ -81,7 +81,9 @@ class AppServiceProvider extends ServiceProvider
     private function configureRateLimiting(): void
     {
         RateLimiter::for('login', function (Request $request) {
-            $key = Str::lower((string) $request->input('email')) . '|' . $request->ip();
+            $email = $request->input('email');
+            $identity = is_string($email) ? Str::lower($email) : 'invalid';
+            $key = $identity . '|' . $request->ip();
 
             return [Limit::perMinute(5)->by($key), Limit::perMinute(20)->by($request->ip())];
         });

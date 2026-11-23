@@ -13,6 +13,9 @@ class AuditLogController extends Controller
     {
         $this->authorize('viewAny', AuditLog::class);
 
+        $from = rescue(fn () => $request->date('from'), null, false);
+        $to = rescue(fn () => $request->date('to'), null, false);
+
         return view('dashboard.audit-logs.index', [
             'events' => AuditLog::query()->distinct()->orderBy('event')->pluck('event'),
             'logs' => AuditLog::with('user')
@@ -21,8 +24,8 @@ class AuditLogController extends Controller
                     $search = '%' . $request->string('search') . '%';
                     $q->where(fn ($q) => $q->where('description', 'like', $search)->orWhere('ip_address', 'like', $search));
                 })
-                ->when($request->filled('from'), fn ($q) => $q->whereDate('created_at', '>=', $request->date('from')))
-                ->when($request->filled('to'), fn ($q) => $q->whereDate('created_at', '<=', $request->date('to')))
+                ->when($from, fn ($q) => $q->whereDate('created_at', '>=', $from))
+                ->when($to, fn ($q) => $q->whereDate('created_at', '<=', $to))
                 ->latest('id')
                 ->paginate(50)
                 ->withQueryString(),

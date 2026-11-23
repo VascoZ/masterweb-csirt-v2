@@ -18,7 +18,9 @@ class PostController extends Controller
             $title .= ' dalam ' . $category->name;
         }
 
-        if ($request->filled('author') && $author = User::firstWhere('username', $request->string('author'))) {
+        if ($request->filled('author') && $author = User::where('username', $request->string('author'))
+            ->whereHas('posts', fn ($query) => $query->published())
+            ->first()) {
             $title .= ' oleh ' . $author->name;
         }
 
