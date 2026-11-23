@@ -107,7 +107,6 @@ class TicketTest extends TestCase
     public function test_validation_error_returns_to_report_form(): void
     {
         $this->get('/aduan');
-        $this->get('/captcha/reload');
 
         $this->post('/aduan', $this->payload(['description' => 'pendek']))
             ->assertRedirect(route('tickets.create'))
@@ -189,7 +188,6 @@ class TicketTest extends TestCase
             'description' => 'Kronologi serangan: halaman utama situs berubah menjadi tampilan peretas.',
             'tlp' => 'AMBER',
             'agreement' => '1',
-            'captcha' => 'abc',
         ];
     }
 }

@@ -37,7 +37,7 @@ Tinjauan dilakukan terhadap seluruh kode `app/`, `routes/`, `config/`, `resource
 | A04 Insecure Design | Model ancaman diwujudkan: whitelist login, 2FA wajib, pemisahan penyimpanan publik/privat, retensi data | Diterapkan |
 | A05 Security Misconfiguration | `APP_DEBUG=false`, header keamanan, `open_basedir`, `disable_functions`, container read-only, file tersembunyi diblokir | Diterapkan, teruji |
 | A06 Vulnerable Components | `composer audit`/`npm audit`, Dependabot, Trivy di CI, PHP dipatok ≥ 8.5.12 | Diterapkan (CI belum dijalankan di GitHub; lihat bagian 5) |
-| A07 Identification & Authentication Failures | 2FA TOTP + kode pemulihan + anti-replay, rate limit berlapis, captcha, password 12–72, sesi idle dan absolut, anti-enumerasi | Diterapkan, teruji |
+| A07 Identification & Authentication Failures | 2FA TOTP + kode pemulihan + anti-replay, rate limit berlapis, Cloudflare Turnstile, password 12–72, sesi idle dan absolut, anti-enumerasi | Diterapkan, teruji |
 | A08 Software & Data Integrity Failures | Aset dibundel lokal (tanpa CDN), `composer.lock`/`package-lock.json`, SHA-256 lampiran | Diterapkan |
 | A09 Logging & Monitoring Failures | Audit log append-only, log keamanan JSON ke file/stderr/syslog, event penolakan akses | Diterapkan; **pemantauan aktif ada di instansi** |
 | A10 SSRF | Aplikasi tidak mengambil URL dari input pengguna; `allow_url_fopen` mati | Tidak ada vektor |

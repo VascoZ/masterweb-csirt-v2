@@ -57,8 +57,11 @@ Setelah selesai, buka `http://<IP-server>` dan login di `/csirt-login`. Untuk me
 
 ### 1.2 Mode non-interaktif
 
+Pada mode ini `TURNSTILE_SITE_KEY` dan `TURNSTILE_SECRET_KEY` **wajib** diisi; installer berhenti bila kosong agar login tidak terkunci.
+
 ```bash
 sudo ADMIN_EMAIL=admin@contoh.go.id ADMIN_PASSWORD='Ganti!Password123' \
+     TURNSTILE_SITE_KEY='0x4AAAAAAA...' TURNSTILE_SECRET_KEY='0x4AAAAAAA...' \
      NONINTERACTIVE=1 bash /tmp/csirt/scripts/install-ubuntu.sh
 ```
 
@@ -69,6 +72,7 @@ sudo DOMAIN=csirt.contoh.go.id SITE_NAME="Contoh-CSIRT" \
      TLS_MODE=letsencrypt LE_EMAIL=admin@contoh.go.id \
      ADMIN_EMAIL=admin@contoh.go.id ADMIN_PASSWORD='Ganti!Password123' \
      LOGIN_WHITELIST="10.10.0.0/16" ENABLE_FIREWALL=1 SSH_ALLOW="10.10.0.0/16" \
+     TURNSTILE_SITE_KEY='0x4AAAAAAA...' TURNSTILE_SECRET_KEY='0x4AAAAAAA...' \
      MAIL_HOST=smtp.contoh.go.id MAIL_USERNAME=noreply@contoh.go.id MAIL_PASSWORD='...' \
      NONINTERACTIVE=1 bash /tmp/csirt/scripts/install-ubuntu.sh
 ```
@@ -78,6 +82,7 @@ sudo DOMAIN=csirt.contoh.go.id SITE_NAME="Contoh-CSIRT" \
 | Variabel | Keterangan |
 |---|---|
 | `ADMIN_EMAIL`, `ADMIN_PASSWORD` | Akun superadmin. Default: `admin@csirt.local` dan password acak. Password sendiri harus 12-72 karakter, huruf besar dan kecil, angka, simbol. |
+| `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` | **Wajib.** Kunci widget Cloudflare Turnstile untuk login dan form aduan. Pada mode interaktif installer menanyakannya bila kosong. Server harus dapat mengakses `https://challenges.cloudflare.com`. |
 | `DOMAIN` | Alamat situs. **Default: IP server** (terdeteksi otomatis). Isi dengan nama domain bila DNS sudah siap. |
 | `TLS_MODE` | `none` (**default**, HTTP), `selfsigned` (uji/internal), `letsencrypt` (DNS publik dan port 80 harus terbuka), atau `custom` (isi `CERT_FILE` dan `KEY_FILE`) |
 | `TRUSTED_HOSTS` | Host tambahan yang diterima aplikasi (selain `DOMAIN`). Pada mode IP, default-nya semua IPv4 server ini. Host lain mendapat 400. |
@@ -190,6 +195,7 @@ Isi minimal di `.env`:
 | `APP_URL` | Alamat publik, wajib `https://` |
 | `DB_PASSWORD`, `DB_ROOT_PASSWORD` | Password acak yang kuat. Bila mengandung `$`, apit dengan kutip tunggal. |
 | `CSIRT_LOGIN_WHITELIST` | IP/CIDR kantor atau VPN, misalnya `10.10.0.0/16,203.0.113.5` |
+| `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` | Kunci widget Cloudflare Turnstile (wajib). Untuk uji lokal boleh memakai kunci uji resmi Cloudflare. |
 | `MAIL_*` | Opsional, hanya bila notifikasi email diaktifkan |
 | `ADMIN_EMAIL`, `ADMIN_PASSWORD` | Superadmin pertama, dibuat otomatis saat container pertama kali berjalan |
 
@@ -380,6 +386,7 @@ sudo -u www-data php artisan up
 | Variabel | Nilai di contoh | Keterangan |
 |---|---|---|
 | `CSIRT_LOGIN_WHITELIST` | `127.0.0.1,::1` | IP/CIDR yang boleh membuka `/csirt-login`. IP lain mendapat 404. |
+| `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` | kosong | Kunci widget Cloudflare Turnstile. **Wajib diisi**; tanpa kunci login dan form aduan menolak semua permintaan. |
 | `TRUSTED_PROXIES` | kosong | Isi bila Laravel berada di belakang proxy HTTP. Tidak perlu untuk Nginx → PHP-FPM (FastCGI). |
 | `CSIRT_ENFORCE_2FA` | `true` | Wajibkan 2FA untuk semua akun dashboard. |
 | `CSIRT_SESSION_ABSOLUTE_MINUTES` | `480` | Batas umur sesi sejak login (menit), terlepas dari aktivitas. `0` = tanpa batas. Dapat ditimpa dari dashboard (skema durasi sesi). |
@@ -440,7 +447,7 @@ Lalu jalankan `php artisan optimize`. Isi aduan tidak pernah disertakan dalam em
 | 400 Bad Request di semua halaman | Host pada URL tidak dikenal. Akses lewat domain `APP_URL`, atau daftarkan alamat IP/domain tambahan di `CSIRT_TRUSTED_HOSTS`, lalu `php artisan optimize`. |
 | Status "Scheduler belum pernah berjalan" di Pengaturan Sistem | Docker: `docker compose ps scheduler` dan `docker compose logs scheduler`. On-premise: `systemctl status cron` dan isi `/etc/cron.d/csirt`. |
 | Error 419 setelah login | Situs diakses lewat HTTP biasa, sedangkan `SESSION_SECURE_COOKIE=true` membuat cookie tidak terkirim. Gunakan HTTPS. |
-| Gambar captcha tidak muncul | Ekstensi `gd` belum terpasang. |
+| Widget Turnstile tidak muncul | Periksa `TURNSTILE_SITE_KEY`/`TURNSTILE_SECRET_KEY` dan pastikan server dapat mengakses `https://challenges.cloudflare.com`. |
 | Tampilan berantakan | Aset belum di-build (`npm run build`), atau `APP_URL` salah. |
 | Lupa password / kehilangan aplikasi autentikator | Gunakan kode pemulihan, minta superadmin lain mereset 2FA di menu **Pengguna**, atau pulihkan dari server: `php artisan csirt:reset-admin email@instansi.go.id` (lihat bawah). |
 

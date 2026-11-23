@@ -53,7 +53,7 @@
                         @endforeach
                     </div>
 
-                    <x-captcha />
+                    <x-turnstile />
 
                     <x-form.checkbox name="agreement" label="Saya menyatakan informasi yang disampaikan benar dan bersedia dihubungi untuk keperluan verifikasi. *" />
 

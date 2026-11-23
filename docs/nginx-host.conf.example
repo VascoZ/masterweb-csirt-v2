@@ -89,6 +89,8 @@ server {
     #
     # location ~ /\.(?!well-known/) { deny all; return 404; }
     #
+    # location = /build/manifest.json { return 404; }
+    #
     # location /build/ {
     #     add_header Cache-Control "public, max-age=31536000, immutable" always;
     #     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;

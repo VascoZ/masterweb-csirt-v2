@@ -98,7 +98,7 @@ class SecurityControlsTest extends TestCase
     public function test_two_factor_challenge_is_cancelled_after_repeated_wrong_codes(): void
     {
         $user = $this->user();
-        $this->post('/login', ['email' => $user->email, 'password' => 'Password!123', 'captcha' => 'x']);
+        $this->post('/login', ['email' => $user->email, 'password' => 'Password!123']);
 
         foreach (range(1, 4) as $i) {
             $this->post('/two-factor-challenge', ['code' => '000000'])->assertSessionHas('error');
@@ -119,7 +119,7 @@ class SecurityControlsTest extends TestCase
         foreach (range(1, 6) as $i) {
             $this->flushSession();
             $this->withServerVariables(['REMOTE_ADDR' => '10.0.0.' . $i]);
-            $this->post('/login', ['email' => $user->email, 'password' => 'Password!123', 'captcha' => 'x']);
+            $this->post('/login', ['email' => $user->email, 'password' => 'Password!123']);
             $status = $this->post('/two-factor-challenge', ['code' => '000000'])->getStatusCode();
         }
 
@@ -174,7 +174,7 @@ class SecurityControlsTest extends TestCase
         // withServerVariables bersifat menetap untuk request berikutnya: kembalikan ke IP yang diizinkan.
         $this->withServerVariables(['REMOTE_ADDR' => '127.0.0.1']);
         $user = $this->user();
-        $this->post('/login', ['email' => $user->email, 'password' => 'salah', 'captcha' => 'x']);
+        $this->post('/login', ['email' => $user->email, 'password' => 'salah']);
 
         $this->assertContains('login_ip_blocked', $messages);
         $this->assertContains('login_failed', $messages);

@@ -45,7 +45,8 @@ class PublicPagesTest extends TestCase
         $csp = $response->headers->get('Content-Security-Policy');
         $this->assertStringContainsString("default-src 'self'", $csp);
         $this->assertStringContainsString("object-src 'none'", $csp);
-        $this->assertMatchesRegularExpression("/script-src 'self' 'nonce-[A-Za-z0-9]+'/", $csp);
+        $this->assertStringContainsString('https://challenges.cloudflare.com', $csp);
+        $this->assertMatchesRegularExpression("/script-src [^;]*'nonce-[A-Za-z0-9]+'/", $csp);
         $this->assertStringNotContainsString('unsafe-inline', $csp);
     }
 

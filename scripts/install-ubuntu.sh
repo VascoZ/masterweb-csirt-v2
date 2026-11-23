@@ -7,17 +7,21 @@
 #  pembaruan keamanan otomatis, sinkronisasi waktu, dan backup harian.
 #
 #  Pemakaian (sebagai root) - MODE SEDERHANA (default):
-#     sudo bash scripts/install-ubuntu.sh        (tanpa pertanyaan, tanpa variabel)
-#     Superadmin default: admin@csirt.local dengan password ACAK yang ditampilkan di akhir
-#     instalasi dan disimpan di /root/csirt-install-info.txt. Aplikasi dapat dibuka lewat ALAMAT IP server (http://<IP-server>), tanpa DNS,
-#     tanpa SSL/TLS, dan firewall (UFW) TIDAK diaktifkan. DNS, HTTPS, dan firewall
-#     dipasang sendiri setelah instalasi selesai (lihat docs/DEPLOY.md bagian 1.4).
+#     sudo bash scripts/install-ubuntu.sh
+#     Installer hanya menanyakan kunci Cloudflare Turnstile (CAPTCHA login & aduan);
+#     sisanya memakai default. Superadmin default: admin@csirt.local dengan password
+#     ACAK yang ditampilkan di akhir instalasi dan disimpan di
+#     /root/csirt-install-info.txt. Aplikasi dapat dibuka lewat ALAMAT IP server
+#     (http://<IP-server>), tanpa DNS, tanpa SSL/TLS, dan firewall (UFW) TIDAK
+#     diaktifkan. DNS, HTTPS, dan firewall dipasang sendiri setelah instalasi selesai
+#     (lihat docs/DEPLOY.md bagian 1.4).
 #
 #  Dengan akun sendiri:
 #     sudo ADMIN_EMAIL=admin@contoh.go.id ADMIN_PASSWORD='KataSandi#Kuat2026' \
+#          TURNSTILE_SITE_KEY='0x4AAAAAAA...' TURNSTILE_SECRET_KEY='0x4AAAAAAA...' \
 #          NONINTERACTIVE=1 bash scripts/install-ubuntu.sh
 #
-#  Variabel (semuanya opsional):
+#  Variabel (TURNSTILE_* wajib; lainnya opsional):
 #     DOMAIN            Alamat situs. Default: IP server (terdeteksi otomatis). Boleh diisi
 #                       nama domain bila DNS sudah siap.
 #     SITE_NAME         Nama tim, mis. "Contoh-CSIRT"     (default: Contoh-CSIRT)
@@ -25,6 +29,11 @@
 #     ADMIN_USERNAME    Username superadmin               (default: admin)
 #     ADMIN_EMAIL       Email superadmin (default: admin@csirt.local)
 #     ADMIN_PASSWORD    Password superadmin (default: ACAK, ditampilkan di akhir instalasi)
+#     TURNSTILE_SITE_KEY, TURNSTILE_SECRET_KEY
+#                       Kunci widget Cloudflare Turnstile (WAJIB; dipakai login &
+#                       form aduan). Bila kosong, installer menanyakannya. Buat widget di
+#                       https://dash.cloudflare.com/?to=/:account/turnstile
+#                       Server harus dapat mengakses https://challenges.cloudflare.com.
 #     TLS_MODE          none (default) | selfsigned | letsencrypt | custom
 #     LE_EMAIL          Email untuk Let's Encrypt         (TLS_MODE=letsencrypt)
 #     CERT_FILE         Path fullchain sertifikat         (TLS_MODE=custom)
@@ -191,6 +200,26 @@ APP_URL="$SCHEME://$DOMAIN"
 [[ "$DOMAIN" =~ ^[A-Za-z0-9.-]+$ ]] || die "DOMAIN tidak valid: $DOMAIN"
 ok "Alamat situs $APP_URL (TLS: $TLS_MODE, direktori: $APP_DIR)"
 
+# Cloudflare Turnstile wajib: login dan form aduan memverifikasi token ke Cloudflare.
+# Nilai yang sudah ada di .env dipakai ulang agar installer aman dijalankan kembali.
+TURNSTILE_SITE_KEY=${TURNSTILE_SITE_KEY:-$( [[ -f "$ENV_FILE" ]] && get_env TURNSTILE_SITE_KEY || true )}
+TURNSTILE_SECRET_KEY=${TURNSTILE_SECRET_KEY:-$( [[ -f "$ENV_FILE" ]] && get_env TURNSTILE_SECRET_KEY || true )}
+if [[ -z "$TURNSTILE_SITE_KEY" || -z "$TURNSTILE_SECRET_KEY" ]]; then
+    if [[ "${NONINTERACTIVE:-0}" == 1 ]]; then
+        die "TURNSTILE_SITE_KEY dan TURNSTILE_SECRET_KEY wajib diisi. Buat widget di https://dash.cloudflare.com/?to=/:account/turnstile lalu jalankan ulang."
+    fi
+    echo
+    warn "Cloudflare Turnstile wajib dikonfigurasi. Tanpa kunci ini login dan form aduan akan menolak semua permintaan (fail-closed)."
+    echo "  Buat widget di https://dash.cloudflare.com/?to=/:account/turnstile lalu salin Site Key dan Secret Key."
+    if [[ -z "$TURNSTILE_SITE_KEY" ]]; then
+        ask TURNSTILE_SITE_KEY "Cloudflare Turnstile Site Key"
+    fi
+    if [[ -z "$TURNSTILE_SECRET_KEY" ]]; then
+        ask TURNSTILE_SECRET_KEY "Cloudflare Turnstile Secret Key" "" secret
+    fi
+fi
+ok "Cloudflare Turnstile dikonfigurasi"
+
 # ----------------------------------------------------------------------------- 1. paket sistem
 step "Memasang paket sistem"
 apt-get update -q
@@ -218,7 +247,7 @@ if ! apt-cache policy "php${PHP_VERSION}-fpm" | grep -q 'Candidate:.*[0-9]'; the
 fi
 
 php_pkgs=()
-for ext in fpm cli mysql gd intl mbstring xml zip bcmath curl opcache; do
+for ext in fpm cli mysql intl mbstring xml zip bcmath curl opcache; do
     # Sejak PHP 8.5 OPcache tertanam di inti PHP, sehingga paket terpisahnya bisa tidak ada.
     if [[ $ext == opcache ]] && ! apt-cache show "php${PHP_VERSION}-opcache" >/dev/null 2>&1; then continue; fi
     php_pkgs+=("php${PHP_VERSION}-$ext")
@@ -342,6 +371,9 @@ set_env DB_USERNAME "$DB_USER"
 set_env DB_PASSWORD "$DB_PASSWORD"
 set_env SESSION_SECURE_COOKIE "$([[ $SCHEME == https ]] && echo true || echo false)"
 set_env CSIRT_LOGIN_WHITELIST "$LOGIN_WHITELIST"
+set_env TURNSTILE_SITE_KEY "$TURNSTILE_SITE_KEY"
+set_env TURNSTILE_SECRET_KEY "$TURNSTILE_SECRET_KEY"
+set_env TURNSTILE_DISABLE false
 [[ -n "${TRUSTED_HOSTS:-}" ]] && set_env CSIRT_TRUSTED_HOSTS "$TRUSTED_HOSTS"
 # Mode IP: jangan alihkan 127.0.0.1 ke IP server (mis. akses lewat port forwarding VirtualBox).
 if [[ "$IP_MODE" == 1 ]]; then set_env CSIRT_CANONICAL_REDIRECT false; else set_env CSIRT_CANONICAL_REDIRECT true; fi
@@ -786,6 +818,13 @@ code=$(curl -s -o /dev/null -w '%{http_code}' -k --resolve "$DOMAIN:80:127.0.0.1
 code=$(curl -s -o /dev/null -w '%{http_code}' -k --resolve "$DOMAIN:80:127.0.0.1" --resolve "$DOMAIN:443:127.0.0.1" "$APP_URL/.env" || true)
 [[ "$code" == 404 ]] && ok "File .env tidak dapat diakses dari web" || warn "Akses $APP_URL/.env mengembalikan '$code' (seharusnya 404)!"
 
+# Turnstile diverifikasi server-side; bila Cloudflare tidak terjangkau login akan ditolak.
+if curl -4 -fsS --max-time 10 -o /dev/null https://challenges.cloudflare.com/turnstile/v0/api.js; then
+    ok "Cloudflare Turnstile dapat dijangkau dari server"
+else
+    warn "Server tidak dapat mengakses https://challenges.cloudflare.com. Login & form aduan akan gagal (fail-closed); buka outbound HTTPS ke domain tersebut."
+fi
+
 umask 077
 cat > "$INFO_FILE" <<EOF
 Situs CSIRT — informasi instalasi ($(date -Is))
@@ -795,6 +834,7 @@ Halaman login    : $APP_URL/csirt-login  (hanya dari: $LOGIN_WHITELIST)
 Direktori        : $APP_DIR
 Konfigurasi      : $ENV_FILE
 Database         : $DB_NAME  (user: $DB_USER, password: $DB_PASSWORD)
+Turnstile        : $TURNSTILE_SITE_KEY (secret tersimpan di $ENV_FILE)
 Backup           : /var/backups/csirt  (harian 02:15, simpan $BACKUP_KEEP_DAYS hari)
 Log instalasi    : $LOG_FILE
 Update aplikasi  : sudo bash $APP_DIR/scripts/update-ubuntu.sh

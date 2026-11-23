@@ -21,7 +21,7 @@
                         <input class="form-check-input" type="checkbox" id="show-password" data-toggle-password="#password">
                         <label class="form-check-label small" for="show-password">Tampilkan password</label>
                     </div>
-                    <x-captcha />
+                    <x-turnstile />
                     <button class="btn btn-primary w-100 btn-lg" type="submit">Masuk</button>
                 </div>
             </form>

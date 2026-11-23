@@ -4,14 +4,12 @@ namespace App\Http\Requests;
 
 use App\Enums\IncidentCategory;
 use App\Enums\Tlp;
+use App\Rules\Turnstile;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 class StoreTicketRequest extends FormRequest
 {
-    /**
-     * Kembali ke form, bukan ke "URL sebelumnya" yang bisa berupa gambar captcha.
-     */
     protected $redirectRoute = 'tickets.create';
 
     public function authorize(): bool
@@ -41,7 +39,7 @@ class StoreTicketRequest extends FormRequest
                 'mimes:' . implode(',', $attachment['mimes']),
             ],
             'agreement' => ['accepted'],
-            'captcha' => ['required', 'captcha'],
+            'cf-turnstile-response' => [new Turnstile()],
         ];
     }
 
@@ -59,10 +57,5 @@ class StoreTicketRequest extends FormRequest
             'attachments.*' => 'lampiran',
             'agreement' => 'persetujuan',
         ];
-    }
-
-    public function messages(): array
-    {
-        return ['captcha.captcha' => 'Kode captcha tidak sesuai.'];
     }
 }

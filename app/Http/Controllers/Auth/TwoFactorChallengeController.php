@@ -43,7 +43,7 @@ class TwoFactorChallengeController extends Controller
         if (! $valid) {
             AuditLogger::log('2fa_failed', $user, description: 'Kode 2FA salah', userId: $user->id);
 
-            // Setelah beberapa kali salah, login harus diulang dari awal (password + captcha),
+            // Setelah beberapa kali salah, login harus diulang dari awal (password + verifikasi keamanan),
             // sehingga kode 2FA tidak bisa ditebak terus-menerus dalam satu sesi.
             $attempts = (int) $request->session()->increment('login.attempts');
             if ($attempts >= self::MAX_ATTEMPTS) {

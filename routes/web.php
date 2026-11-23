@@ -42,8 +42,6 @@ Route::post('/aduan/status/reply', [TicketController::class, 'reply'])->middlewa
 Route::get('/.well-known/security.txt', SecurityTxtController::class)->name('security-txt');
 Route::redirect('/security.txt', '/.well-known/security.txt', 301);
 
-Route::get('/captcha/reload', [LoginController::class, 'reloadCaptcha'])->middleware('throttle:30,1')->name('captcha.reload');
-
 /*
 |--------------------------------------------------------------------------
 | Autentikasi (dibatasi whitelist IP)

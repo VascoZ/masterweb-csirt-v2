@@ -13,17 +13,6 @@ document.addEventListener('click', (event) => {
     }
 });
 
-// <button data-captcha-reload> : ganti gambar captcha.
-document.querySelectorAll('[data-captcha-reload]').forEach((button) => {
-    button.addEventListener('click', async () => {
-        const image = document.querySelector(button.dataset.captchaReload);
-        const response = await fetch(button.dataset.url, { headers: { Accept: 'application/json' } });
-        if (image && response.ok) {
-            image.src = (await response.json()).captcha;
-        }
-    });
-});
-
 // <input type="checkbox" data-toggle-password="#password"> : tampilkan/sembunyikan password.
 document.querySelectorAll('[data-toggle-password]').forEach((toggle) => {
     toggle.addEventListener('change', () => {

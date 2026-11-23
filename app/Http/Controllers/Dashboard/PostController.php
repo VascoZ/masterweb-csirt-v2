@@ -6,13 +6,11 @@ use App\Http\Controllers\Controller;
 use App\Models\Category;
 use App\Models\Post;
 use App\Support\HtmlSanitizer;
-use Cviebrock\EloquentSluggable\Services\SlugService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
-use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
 class PostController extends Controller
@@ -85,18 +83,20 @@ class PostController extends Controller
 
     public function checkSlug(Request $request): JsonResponse
     {
-        return response()->json(['slug' => SlugService::createSlug(Post::class, 'slug', (string) $request->query('title', ''))]);
+        return response()->json(['slug' => Str::slug((string) $request->query('title', ''))]);
     }
 
     private function validated(Request $request, ?Post $post = null): array
     {
         $data = $request->validate([
             'title' => ['required', 'string', 'max:255'],
-            'slug' => ['required', 'alpha_dash', 'max:255', Rule::unique('posts')->ignore($post)],
+            'slug' => ['required', 'alpha_dash', 'max:255'],
             'category_id' => ['required', 'exists:categories,id'],
             'image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
             'body' => ['required', 'string'],
         ]);
+
+        $data['slug'] = $this->uniqueSlug($data['slug'], $post);
 
         if ($request->hasFile('image')) {
             if ($post?->image) {
@@ -117,5 +117,22 @@ class PostController extends Controller
         }
 
         return $data;
+    }
+
+    private function uniqueSlug(string $slug, ?Post $post = null): string
+    {
+        $taken = fn (string $candidate) => Post::where('slug', $candidate)
+            ->when($post, fn ($query) => $query->whereKeyNot($post->getKey()))
+            ->exists();
+
+        if (! $taken($slug)) {
+            return $slug;
+        }
+
+        do {
+            $candidate = $slug . '-' . Str::lower(Str::random(6));
+        } while ($taken($candidate));
+
+        return $candidate;
     }
 }

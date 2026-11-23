@@ -17,6 +17,7 @@ PHP_VERSION=8.5
 
 step() { echo; echo $'\e[1;34m'"==> $*"$'\e[0m'; }
 ok()   { echo $'\e[1;32m'"  ✓ $*"$'\e[0m'; }
+warn() { echo $'\e[1;33m'"  ! $*"$'\e[0m'; }
 die()  { echo $'\e[1;31m'"ERROR: $*"$'\e[0m' >&2; exit 1; }
 
 [[ $EUID -eq 0 ]] || die "Jalankan sebagai root: sudo bash $0"
@@ -30,6 +31,19 @@ fi
 cd "$APP_DIR"
 
 artisan() { sudo -u "$WEB_USER" HOME=/tmp php artisan "$@"; }
+
+ENV_FILE="$APP_DIR/.env"
+get_env() { grep -E "^$1=" "$ENV_FILE" 2>/dev/null | tail -1 | cut -d= -f2- | sed -E "s/^['\"](.*)['\"]$/\1/"; }
+
+# CAPTCHA gambar sudah dihapus dan diganti Cloudflare Turnstile. Tanpa kunci,
+# login & form aduan akan menolak semua permintaan (fail-closed).
+if [[ -z "$(get_env TURNSTILE_SITE_KEY)" || -z "$(get_env TURNSTILE_SECRET_KEY)" ]]; then
+    if [[ "$(get_env TURNSTILE_DISABLE)" == "true" ]]; then
+        warn "Turnstile nonaktif (TURNSTILE_DISABLE=true). Aktifkan kembali sebelum produksi."
+    else
+        die "TURNSTILE_SITE_KEY/TURNSTILE_SECRET_KEY belum diisi di $ENV_FILE. Isi kunci widget Cloudflare Turnstile (https://dash.cloudflare.com/?to=/:account/turnstile) lalu jalankan ulang."
+    fi
+fi
 
 # Pastikan situs keluar dari mode pemeliharaan walau update gagal di tengah jalan.
 MAINTENANCE=0

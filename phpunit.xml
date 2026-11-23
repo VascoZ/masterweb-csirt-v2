@@ -32,7 +32,7 @@
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>
-        <env name="CAPTCHA_DISABLE" value="true"/>
+        <env name="TURNSTILE_DISABLE" value="true"/>
         <env name="CSIRT_LOGIN_WHITELIST" value="127.0.0.1,::1"/>
         <env name="CSIRT_ENFORCE_2FA" value="true"/>
         <env name="APP_LOCALE" value="id"/>

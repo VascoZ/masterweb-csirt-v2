@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Rules\Turnstile;
 use App\Support\AuditLogger;
 use App\Support\Sessions;
 use Illuminate\Http\RedirectResponse;
@@ -23,14 +24,11 @@ class LoginController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
-        // Redirect eksplisit ke form: "back()" bisa mengarah ke URL gambar captcha
-        // karena gambar itu adalah request GET terakhir yang dicatat sesi.
+        // Redirect eksplisit ke form login, bukan mengandalkan "back()".
         $validator = Validator::make($request->all(), [
             'email' => ['required', 'email'],
             'password' => ['required', 'string'],
-            'captcha' => ['required', 'captcha'],
-        ], [
-            'captcha.captcha' => 'Kode captcha tidak sesuai.',
+            'cf-turnstile-response' => [new Turnstile()],
         ]);
 
         if ($validator->fails()) {
@@ -100,10 +98,5 @@ class LoginController extends Controller
         $request->session()->regenerateToken();
 
         return redirect()->route('home');
-    }
-
-    public function reloadCaptcha()
-    {
-        return response()->json(['captcha' => captcha_src()]);
     }
 }

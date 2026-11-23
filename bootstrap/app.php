@@ -5,6 +5,7 @@ use App\Http\Middleware\EnsureTicketsEnabled;
 use App\Http\Middleware\EnsureTwoFactorEnabled;
 use App\Http\Middleware\EnsureUserIsActive;
 use App\Http\Middleware\RedirectToCanonicalHost;
+use App\Http\Middleware\RejectArrayQueryParameters;
 use App\Http\Middleware\RestrictLoginIp;
 use App\Http\Middleware\SecurityHeaders;
 use App\Support\AuditLogger;
@@ -30,7 +31,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->trustHosts(at: fn () => TrustedHosts::patterns(), subdomains: false);
 
         // Satu host kanonik agar cookie sesi tidak terpecah antara localhost dan 127.0.0.1.
-        $middleware->web(prepend: [RedirectToCanonicalHost::class]);
+        $middleware->web(prepend: [RejectArrayQueryParameters::class, RedirectToCanonicalHost::class]);
 
         $middleware->web(append: [
             SecurityHeaders::class,

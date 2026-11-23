@@ -19,7 +19,7 @@ class AuthenticationTest extends TestCase
             ->assertNotFound();
 
         $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.10'])
-            ->post('/login', ['email' => 'a@b.c', 'password' => 'x', 'captcha' => 'x'])
+            ->post('/login', ['email' => 'a@b.c', 'password' => 'x'])
             ->assertNotFound();
     }
 
@@ -36,7 +36,7 @@ class AuthenticationTest extends TestCase
         $user = $this->user();
 
         $this->from('/csirt-login')
-            ->post('/login', ['email' => $user->email, 'password' => 'salah', 'captcha' => 'x'])
+            ->post('/login', ['email' => $user->email, 'password' => 'salah'])
             ->assertRedirect('/csirt-login')
             ->assertSessionHas('error');
 
@@ -44,13 +44,11 @@ class AuthenticationTest extends TestCase
         $this->assertDatabaseHas('audit_logs', ['event' => 'login_failed']);
     }
 
-    public function test_validation_error_returns_to_form_not_captcha_image(): void
+    public function test_validation_error_returns_to_login_form(): void
     {
-        // Browser memuat gambar captcha setelah halaman login -> jadi "URL sebelumnya".
         $this->get('/csirt-login');
-        $this->get('/captcha/reload');
 
-        $this->post('/login', ['email' => 'bukan-email', 'password' => 'x', 'captcha' => 'x'])
+        $this->post('/login', ['email' => 'bukan-email', 'password' => 'x'])
             ->assertRedirect(route('login'))
             ->assertSessionHasErrors('email');
     }
@@ -60,17 +58,17 @@ class AuthenticationTest extends TestCase
         $user = $this->user();
 
         foreach (range(1, 5) as $i) {
-            $this->post('/login', ['email' => $user->email, 'password' => 'salah', 'captcha' => 'x']);
+            $this->post('/login', ['email' => $user->email, 'password' => 'salah']);
         }
 
-        $this->post('/login', ['email' => $user->email, 'password' => 'salah', 'captcha' => 'x'])->assertStatus(429);
+        $this->post('/login', ['email' => $user->email, 'password' => 'salah'])->assertStatus(429);
     }
 
     public function test_user_with_2fa_must_pass_challenge(): void
     {
         $user = $this->user();
 
-        $this->post('/login', ['email' => $user->email, 'password' => 'Password!123', 'captcha' => 'x'])
+        $this->post('/login', ['email' => $user->email, 'password' => 'Password!123'])
             ->assertRedirect(route('two-factor.create'));
         $this->assertGuest();
 
@@ -88,12 +86,12 @@ class AuthenticationTest extends TestCase
         $user = $this->user();
         $code = (new Google2FA())->getCurrentOtp($user->two_factor_secret);
 
-        $this->post('/login', ['email' => $user->email, 'password' => 'Password!123', 'captcha' => 'x']);
+        $this->post('/login', ['email' => $user->email, 'password' => 'Password!123']);
         $this->post('/two-factor-challenge', ['code' => $code]);
         $this->assertAuthenticatedAs($user);
 
         $this->post('/logout');
-        $this->post('/login', ['email' => $user->email, 'password' => 'Password!123', 'captcha' => 'x']);
+        $this->post('/login', ['email' => $user->email, 'password' => 'Password!123']);
         $this->post('/two-factor-challenge', ['code' => $code])->assertSessionHas('error');
         $this->assertGuest();
     }
@@ -102,7 +100,7 @@ class AuthenticationTest extends TestCase
     {
         $user = $this->user();
 
-        $this->post('/login', ['email' => $user->email, 'password' => 'Password!123', 'captcha' => 'x']);
+        $this->post('/login', ['email' => $user->email, 'password' => 'Password!123']);
         $this->post('/two-factor-challenge', ['recovery_code' => 'aaaaa-bbbbb'])->assertRedirect(route('dashboard.index'));
         $this->assertAuthenticatedAs($user);
         $this->assertSame([], $user->fresh()->two_factor_recovery_codes);
@@ -111,7 +109,7 @@ class AuthenticationTest extends TestCase
     public function test_two_factor_challenge_expires(): void
     {
         $user = $this->user();
-        $this->post('/login', ['email' => $user->email, 'password' => 'Password!123', 'captcha' => 'x']);
+        $this->post('/login', ['email' => $user->email, 'password' => 'Password!123']);
 
         $this->travel(6)->minutes();
         $code = (new Google2FA())->getCurrentOtp($user->two_factor_secret);
@@ -170,7 +168,7 @@ class AuthenticationTest extends TestCase
     {
         $user = $this->user('writer', ['is_active' => false]);
 
-        $this->post('/login', ['email' => $user->email, 'password' => 'Password!123', 'captcha' => 'x'])
+        $this->post('/login', ['email' => $user->email, 'password' => 'Password!123'])
             ->assertRedirect(route('login'))
             ->assertSessionHas('error');
         $this->assertGuest();

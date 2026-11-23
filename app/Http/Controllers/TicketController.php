@@ -30,7 +30,7 @@ class TicketController extends Controller
 
     public function store(StoreTicketRequest $request): RedirectResponse
     {
-        $data = $request->safe()->except(['attachments', 'agreement', 'captcha']);
+        $data = $request->safe()->except(['attachments', 'agreement', 'cf-turnstile-response']);
 
         $ticket = DB::transaction(function () use ($data, $request) {
             $ticket = new Ticket($data);

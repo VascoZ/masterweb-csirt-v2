@@ -42,45 +42,47 @@ class UserController extends Controller
         return redirect()->route('dashboard.users.index')->with('success', 'Pengguna berhasil ditambahkan.');
     }
 
-    public function edit(User $user): View
+    public function edit(string $user): View
     {
-        $this->authorize('update', $user);
+        $target = User::where('username', $user)->firstOrFail();
+        $this->authorize('update', $target);
 
-        return view('dashboard.users.form', compact('user'));
+        return view('dashboard.users.form', ['user' => $target]);
     }
 
-    public function update(Request $request, User $user): RedirectResponse
+    public function update(Request $request, string $user): RedirectResponse
     {
-        $this->authorize('update', $user);
+        $target = User::where('username', $user)->firstOrFail();
+        $this->authorize('update', $target);
 
-        $data = $request->validate($this->rules($user) + ['password' => ['nullable', Password::defaults()]]);
+        $data = $request->validate($this->rules($target) + ['password' => ['nullable', Password::defaults()]]);
 
         if (blank($data['password'] ?? null)) {
             unset($data['password']);
         }
 
-        $user->fill($data);
+        $target->fill($data);
         $terminateSessions = isset($data['password']);
 
-        if ($request->user()->can('changeRole', $user)) {
-            $user->is_admin = $request->boolean('is_admin');
+        if ($request->user()->can('changeRole', $target)) {
+            $target->is_admin = $request->boolean('is_admin');
 
             if ($request->has('is_active')) {
-                $user->is_active = $request->boolean('is_active');
-                $terminateSessions = $terminateSessions || ! $user->is_active;
+                $target->is_active = $request->boolean('is_active');
+                $terminateSessions = $terminateSessions || ! $target->is_active;
             }
 
-            if ($request->boolean('reset_2fa') && $user->hasTwoFactorEnabled()) {
-                $user->resetTwoFactor();
+            if ($request->boolean('reset_2fa') && $target->hasTwoFactorEnabled()) {
+                $target->resetTwoFactor();
                 $terminateSessions = true;
-                AuditLogger::log('2fa_reset', $user, description: '2FA pengguna direset oleh superadmin');
+                AuditLogger::log('2fa_reset', $target, description: '2FA pengguna direset oleh superadmin');
             }
         }
 
-        $user->save();
+        $target->save();
 
         if ($terminateSessions) {
-            Sessions::terminateAll($user);
+            Sessions::terminateAll($target);
         }
 
         return redirect()->route('dashboard.users.index')->with('success', 'Pengguna berhasil diperbarui.');
