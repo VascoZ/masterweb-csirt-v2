@@ -24,7 +24,7 @@ COPY . .
 RUN composer dump-autoload --no-dev --optimize --classmap-authoritative --no-scripts
 
 # ---------- 3. Runtime PHP-FPM ----------
-FROM php:8.5-fpm-alpine AS app
+FROM php:8.6-fpm-alpine AS app
 
 # Sejak PHP 8.5 OPcache sudah tertanam di inti PHP; hanya dipasang bila belum ada.
 RUN apk add --no-cache icu-libs libzip libpng libjpeg-turbo freetype libwebp fcgi \
